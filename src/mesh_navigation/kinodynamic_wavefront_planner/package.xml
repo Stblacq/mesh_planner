@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>kinodynamic_wavefront_planner</name>
+    <version>0.1.1</version>
+    <description>The kinodynamic_wavefront_planner package</description>
+    <maintainer email="o.jerome@innopolis.university">Otobong Jerome</maintainer>
+    <license>BSD 3-Clause</license>
+    <author email="o.jerome@innopolis.university">Otobong Jerome</author>
+
+    <buildtool_depend>catkin</buildtool_depend>
+
+    <depend>roscpp</depend>
+    <depend>wave_front_planner</depend>
+
+    <depend>mbf_mesh_core</depend>
+    <depend>mbf_utility</depend>
+    <depend>mesh_map</depend>
+
+    <export>
+        <mbf_mesh_core plugin="${prefix}/kinodynamic_wavefront_planner.xml"/>
+    </export>
+</package>

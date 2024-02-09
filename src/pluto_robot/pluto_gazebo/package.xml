@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>pluto_gazebo</name>
+  <license>BSD-3</license>
+  <version>1.0.0</version>
+  <description>
+    Collection of launch files and world models to spawn the robot Pluto in outdoor simulation worlds,
+    e.g. in the forest or in the Botanical Garden at Osnabrück University.
+  </description>
+  <url type="website">http://wiki.ros.org/pluto_robot/pluto_gazebo</url>
+
+  <maintainer email="spuetz@uos.de">Sebastian Pütz</maintainer>
+  <author email="spuetz@uos.de">Sebastian Pütz</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>diff_drive_controller</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>joint_state_controller</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>pluto_description</exec_depend>
+  <exec_depend>robot_pose_ekf</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+
+  <export>
+    <gazebo_ros gazebo_model_path="${prefix}/models"/>
+    <gazebo_ros gazebo_media_path="${prefix}/models"/>
+  </export>
+</package>

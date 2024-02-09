@@ -1,0 +1,2 @@
+use_gui: false
+source_list: [volksbot_joint_states, levers_joint_states]

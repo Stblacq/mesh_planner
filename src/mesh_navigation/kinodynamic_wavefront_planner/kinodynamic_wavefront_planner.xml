@@ -1,0 +1,8 @@
+<library path="lib/libkinodynamic_wavefront_planner">
+    <class name="kinodynamic_wavefront_planner/KinodynamicWavefrontPlanner" type="kinodynamic_wavefront_planner::KinodynamicWavefrontPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            A wave front mesh planner for mbf_mesh_nav
+        </description>
+    </class>
+</library>

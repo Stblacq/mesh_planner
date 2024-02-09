@@ -1,0 +1,12 @@
+global_frame: map
+robot_frame: base_footprint
+robot_base_frame: base_link
+
+mesh_part: mesh
+layers:
+  - name: 'height_diff'
+    type: 'mesh_layers/HeightDiffLayer'
+
+height_diff:
+  factor: 1.0
+  threshold: 0.08

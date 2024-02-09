@@ -1,0 +1,30 @@
+planners:
+  - name: 'wave_front_planner'
+    type: 'wave_front_planner/WaveFrontPlanner'
+  - name: 'dijkstra_mesh_planner'
+    type: 'dijkstra_mesh_planner/DijkstraMeshPlanner'
+
+
+controllers:
+  - name: 'mesh_controller'
+    type: 'mesh_controller/MeshController'
+
+wave_front_planner:
+  cost_limit: 1.0
+  publish_vector_field: true
+
+mesh_controller:
+  ang_vel_factor: 5.0
+  lin_vel_factor: 1.0
+  max_search_radius: 0.8
+
+
+planner_patience: -1.0
+planner_max_retries: 2
+
+controller_patience: 7.0
+controller_max_retries: 6
+
+robot_frame: 'base_footprint'
+dist_tolerance: 0.2
+angle_tolerance: 0.8
