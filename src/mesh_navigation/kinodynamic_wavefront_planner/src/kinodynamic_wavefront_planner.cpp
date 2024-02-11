@@ -53,7 +53,6 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
   path_pub.publish(cvp_path);
   
   // ros::Rate rate(1);
-// /move_base_flex/mesh_map/mesh
   // ros::spinOnce();
   // rate.sleep();
   path_pub1.publish(kd_path);
