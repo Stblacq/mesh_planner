@@ -45,15 +45,19 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
   uint32_t outcome = waveFrontPropagation(goal_vec, start_vec, path);
 
   std::vector<lvr2::VertexHandle> path_points = findMinimalCostPath(start_vec,goal_vec);
-  for (auto& next : path_points) {
-                ROS_INFO(">>>>>>>>>>>>path point!");
+  nav_msgs::Path kd_path = getPathFromPoints(path_points);
 
-        }
-  publishPath(path_pub,path_points,plan);
+  nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
-  // nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
+  plan = kd_path.poses;
+  path_pub.publish(cvp_path);
   
-  // path_pub.publish(cvp_path);
+  // ros::Rate rate(1);
+// /move_base_flex/mesh_map/mesh
+  // ros::spinOnce();
+  // rate.sleep();
+  path_pub1.publish(kd_path);
+
   mesh_map->publishVertexCosts(potential, "Potential");
   ROS_INFO_STREAM("Path length: " << cost << "m");
 
@@ -111,43 +115,43 @@ std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::getAdjacentVertices
     return adjacentVertices;
 }
 
-// nav_msgs::Path KinodynamicWavefrontPlanner::getCvpPath(std::list<std::pair<mesh_map::Vector, 
-// lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost) {
-//     path.reverse();
+nav_msgs::Path KinodynamicWavefrontPlanner::getCvpPath(std::list<std::pair<mesh_map::Vector, 
+lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost) {
+    path.reverse();
 
-//     std_msgs::Header header;
-//     header.stamp = ros::Time::now();
-//     header.frame_id = mesh_map->mapFrame();
+    std_msgs::Header header;
+    header.stamp = ros::Time::now();
+    header.frame_id = mesh_map->mapFrame();
 
-//     cost = 0;
-//     float dir_length;
-//     nav_msgs::Path path_msg;
-//     path_msg.header = header;
+    cost = 0;
+    float dir_length;
+    nav_msgs::Path path_msg;
+    path_msg.header = header;
 
-//     if (!path.empty()) {
-//         mesh_map::Vector vec = path.front().first;
-//         lvr2::FaceHandle fH = path.front().second;
-//         path.pop_front();
+    if (!path.empty()) {
+        mesh_map::Vector vec = path.front().first;
+        lvr2::FaceHandle fH = path.front().second;
+        path.pop_front();
 
-//         const auto& face_normals = mesh_map->faceNormals();
-//         for (auto& next : path) {
-//             geometry_msgs::PoseStamped pose;
-//             pose.header = header;
-//             pose.pose = mesh_map::calculatePoseFromPosition(vec, next.first, face_normals[fH], dir_length);
-//             cost += dir_length;
-//             vec = next.first;
-//             fH = next.second;
-//             path_msg.poses.push_back(pose);
-//         }
+        const auto& face_normals = mesh_map->faceNormals();
+        for (auto& next : path) {
+            geometry_msgs::PoseStamped pose;
+            pose.header = header;
+            pose.pose = mesh_map::calculatePoseFromPosition(vec, next.first, face_normals[fH], dir_length);
+            cost += dir_length;
+            vec = next.first;
+            fH = next.second;
+            path_msg.poses.push_back(pose);
+        }
 
-//         geometry_msgs::PoseStamped last_pose;
-//         last_pose.header = header;
-//         last_pose.pose = mesh_map::calculatePoseFromPosition(vec, goal_vec, face_normals[fH], dir_length);
-//         cost += dir_length;
-//         path_msg.poses.push_back(last_pose);
-//     }
-//     return path_msg;
-// }
+        geometry_msgs::PoseStamped last_pose;
+        last_pose.header = header;
+        last_pose.pose = mesh_map::calculatePoseFromPosition(vec, goal_vec, face_normals[fH], dir_length);
+        cost += dir_length;
+        path_msg.poses.push_back(last_pose);
+    }
+    return path_msg;
+}
 
 std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath(
     const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal) {
@@ -230,14 +234,10 @@ for (auto gv : goal_vertices) {
 
 std::reverse(path.begin(), path.end()); // Reverse to get the path from start to goal
 return path;
-
-
 }
 
 
-void KinodynamicWavefrontPlanner::publishPath(const ros::Publisher &path_pub,
-                                               const std::vector<lvr2::VertexHandle> &path,
-                                               std::vector<geometry_msgs::PoseStamped>& plan) {
+nav_msgs::Path KinodynamicWavefrontPlanner::getPathFromPoints(const std::vector<lvr2::VertexHandle> &path) {
     const auto& mesh = mesh_map->mesh();
     const auto& vertex_normals = mesh_map->vertexNormals();
 
@@ -267,12 +267,10 @@ void KinodynamicWavefrontPlanner::publishPath(const ros::Publisher &path_pub,
             pose_stamped.pose.orientation.z = 0.0;
             pose_stamped.pose.orientation.w = 1.0;
         }
-
-        plan.push_back(pose_stamped);
         nav_path.poses.push_back(pose_stamped);
     }
 
-    path_pub.publish(nav_path);
+    return nav_path;
 }
 
 

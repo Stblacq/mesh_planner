@@ -141,7 +141,7 @@ class Planning(smach.StateMachine):
                     GetPathAction,
                     goal_cb=Planning.planner_goal_cb,
                     result_cb=Planning.planner_result_cb),
-                transitions={kinodynamic_wavefront_planner
+                transitions={
                     'succeeded': 'succeeded',
                     'preempted': 'preempted',
                     'aborted': 'aborted'

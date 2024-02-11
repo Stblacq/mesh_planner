@@ -142,6 +142,10 @@ bool WaveFrontPlanner::initialize(const std::string& plugin_name,
   private_nh.param("goal_dist_offset", goal_dist_offset, 0.3f);
 
   path_pub = private_nh.advertise<nav_msgs::Path>("path", 1, true);
+  path_pub1 = private_nh.advertise<nav_msgs::Path>("path1", 1, true);
+  path_pub2 = private_nh.advertise<nav_msgs::Path>("path2", 1, true);
+  path_pub3 = private_nh.advertise<nav_msgs::Path>("path3", 1, true);
+
   const auto& mesh = mesh_map->mesh();
   direction = lvr2::DenseVertexMap<float>(mesh.nextVertexIndex(), 0);
   // TODO check all map dependencies! (loaded layers etc...)

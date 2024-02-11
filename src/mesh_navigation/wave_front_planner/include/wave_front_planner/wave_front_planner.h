@@ -171,6 +171,9 @@ protected:
 
   //! publisher for the backtracked path
   ros::Publisher path_pub;
+  ros::Publisher path_pub1;
+  ros::Publisher path_pub2;
+  ros::Publisher path_pub3;
 
   //! whether to publish the vector field or not
   bool publish_vector_field;
