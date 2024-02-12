@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <limits>
+#include <functional>
 #include <ros/ros.h>
 #include <visualization_msgs/Marker.h>
 
@@ -44,18 +45,28 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
   uint32_t outcome = waveFrontPropagation(goal_vec, start_vec, path);
 
-  std::vector<lvr2::VertexHandle> path_points = findMinimalCostPath(start_vec,goal_vec);
+  std::vector<lvr2::VertexHandle> path_points = findMinimalCostPath(start_vec,
+   goal_vec,
+   [this](const lvr2::VertexHandle& from, const lvr2::VertexHandle& to) -> float {
+        return this->getKinodynamicCost(from, to);
+    });
   nav_msgs::Path kd_path = getPathFromPoints(path_points);
 
+  std::vector<lvr2::VertexHandle> path_points_2 = findMinimalCostPath(start_vec,
+   goal_vec,
+   [this](const lvr2::VertexHandle& from, const lvr2::VertexHandle& to) -> float {
+        return this->getSteeringAngleCost(from, to);
+    });
+  nav_msgs::Path min_steering_path = getPathFromPoints(path_points_2);
+  
   nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
   plan = kd_path.poses;
   path_pub.publish(cvp_path);
   
-  // ros::Rate rate(1);
-  // ros::spinOnce();
-  // rate.sleep();
   path_pub1.publish(kd_path);
+
+  path_pub2.publish(min_steering_path);
 
   mesh_map->publishVertexCosts(potential, "Potential");
   ROS_INFO_STREAM("Path length: " << cost << "m");
@@ -70,14 +81,19 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
 float KinodynamicWavefrontPlanner::getKinodynamicCost(const lvr2::VertexHandle& from,
  const lvr2::VertexHandle& to) {
-    // const auto& mesh = mesh_map->mesh();
-    // auto p_from = mesh.getVertexPosition(from);
-    // auto p_to = mesh.getVertexPosition(to);
-    // std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
-    // std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
-    // double steering_angle = calculateSteeringAngle(current_state, next_state,2,0.1);
-    // return steering_angle;
     return 1;
+}
+
+
+float KinodynamicWavefrontPlanner::getSteeringAngleCost(const lvr2::VertexHandle& from,
+ const lvr2::VertexHandle& to) {
+    const auto& mesh = mesh_map->mesh();
+    auto p_from = mesh.getVertexPosition(from);
+    auto p_to = mesh.getVertexPosition(to);
+    std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
+    std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
+    double steering_angle = calculateSteeringAngle(current_state, next_state,2,0.1);
+    return steering_angle;
 }
 
 
@@ -153,7 +169,9 @@ lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost) {
 }
 
 std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath(
-    const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal) {
+     const mesh_map::Vector& original_start,
+     const mesh_map::Vector& original_goal,
+     std::function<double(const lvr2::VertexHandle&, const lvr2::VertexHandle&)> cost_function) {
 
   // Access the mesh and the pre-computed vertex costs
   const auto& mesh = mesh_map->mesh();
@@ -199,7 +217,7 @@ std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath
       if (visited[neighbor]) continue; // Skip visited neighbors
 
       if (!pq.containsKey(neighbor)) {
-        float neighbour_cost = vertex_costs[neighbor] + getKinodynamicCost(current_vh,neighbor);
+        float neighbour_cost = vertex_costs[neighbor] + cost_function(current_vh,neighbor);
         pq.insert(neighbor, neighbour_cost);
         predecessors.emplace(neighbor, current_vh);; // Track the path
       }
