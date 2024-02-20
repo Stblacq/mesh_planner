@@ -14,7 +14,16 @@
 #include <mesh_map/util.h>
 #include <pluginlib/class_list_macros.h>
 
+
+
+#include "geometrycentral/surface/flip_geodesics.h"
+#include "geometrycentral/surface/meshio.h"
+#include "geometrycentral/surface/mesh_graph_algorithms.h"
+
 #include "kinodynamic_wavefront_planner/kinodynamic_wavefront_planner.h"
+
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
 
 PLUGINLIB_EXPORT_CLASS(kinodynamic_wavefront_planner::KinodynamicWavefrontPlanner, mbf_mesh_core::MeshPlanner);
 
@@ -50,14 +59,14 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
    [this](const lvr2::VertexHandle& from, const lvr2::VertexHandle& to) -> float {
         return this->getKinodynamicCost(from, to);
     });
-  nav_msgs::Path kd_path = getPathFromPoints(path_points);
+  nav_msgs::Path kd_path = getNavPathFromVertices(path_points);
 
   std::vector<lvr2::VertexHandle> path_points_2 = findMinimalCostPath(start_vec,
    goal_vec,
    [this](const lvr2::VertexHandle& from, const lvr2::VertexHandle& to) -> float {
         return this->getSteeringAngleCost(from, to);
     });
-  nav_msgs::Path min_steering_path = getPathFromPoints(path_points_2);
+  nav_msgs::Path min_steering_path = getNavPathFromVertices(path_points_2);
   
   nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
@@ -256,11 +265,44 @@ for (auto gv : goal_vertices) {
 }
 
 std::reverse(path.begin(), path.end()); // Reverse to get the path from start to goal
+
+// Store vertices and vertex normal in .obj
+// Store path indices
+std::pair<std::string, std::vector<int>>  mesh_obj_path = createMeshObjAndPathIndices(visited, path);
+ROS_INFO(">>>>>>>>>>>> File Here! %s", mesh_obj_path.first.c_str());
+
+// load mesh with geometry central
+std::unique_ptr<ManifoldSurfaceMesh> surface_mesh;
+std::unique_ptr<VertexPositionGeometry> geometry;
+std::tie(surface_mesh, geometry) = readManifoldSurfaceMesh(mesh_obj_path.first.c_str());
+
+
+std::vector<Halfedge> edgePath;
+auto path_indices = mesh_obj_path.second;
+  for(size_t i = 0; i < path_indices.size() - 1; ++i) {
+        auto vertex1 = surface_mesh->vertex(path_indices[i]);
+        auto vertex2 = surface_mesh->vertex(path_indices[i + 1]);
+
+        std::vector<Halfedge> segmentPath = shortestEdgePath(*geometry, vertex1, vertex2);
+
+        edgePath.insert(edgePath.end(), segmentPath.begin(), segmentPath.end());
+    }
+
+std::unique_ptr<FlipEdgeNetwork>  flip_edge_network = std::unique_ptr<FlipEdgeNetwork>(new FlipEdgeNetwork(*surface_mesh, *geometry, {edgePath}));
+flip_edge_network->iterativeShorten();
+
+// construct FlipEdgeNetwork path from lvr2 vertices path std::vector<Halfedge>  egde_path = getEdgeNetworkPath(std::vector<lvr2::VertexHandle> path)
+//  FlipEdgeNetwork flip_edge_network = new FlipEdgeNetwork(mesh_, geom, {egde_path});
+// flipNetwork->iterativeShorten();
+
+// Extract the path and store it in the vector
+// std::vector<Vector3> path3D = flipNetwork->getPathPolyline3D().front();
+
 return path;
 }
 
 
-nav_msgs::Path KinodynamicWavefrontPlanner::getPathFromPoints(const std::vector<lvr2::VertexHandle> &path) {
+nav_msgs::Path KinodynamicWavefrontPlanner::getNavPathFromVertices(const std::vector<lvr2::VertexHandle> &path) {
     const auto& mesh = mesh_map->mesh();
     const auto& vertex_normals = mesh_map->vertexNormals();
 
@@ -311,5 +353,71 @@ double KinodynamicWavefrontPlanner::calculateSteeringAngle(const std::vector<dou
     double delta = radius_of_curvature != std::numeric_limits<double>::infinity() ? atan(L / radius_of_curvature) : 0;
     return delta;
 }
+
+std::pair<std::string, std::vector<int>> KinodynamicWavefrontPlanner::createMeshObjAndPathIndices(
+    const std::unordered_map<lvr2::VertexHandle, bool>& visited,
+    const std::vector<lvr2::VertexHandle>& path) {
+
+    const auto& mesh = mesh_map->mesh();
+    const auto& vertex_normals = mesh_map->vertexNormals();
+
+    std::string filename = "/home/developer/workspace/src/mesh_navigation/kinodynamic_wavefront_planner/mesh.obj";
+
+    std::ofstream objFile(filename);
+    if (!objFile.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return {};
+    }
+
+    std::unordered_set<lvr2::FaceHandle> F;
+    for (const auto& [vertex, isVisited] : visited) {
+            auto faces = mesh.getFacesOfVertex(vertex);
+            F.insert(faces.begin(), faces.end());
+    }
+
+    std::unordered_set<lvr2::VertexHandle> V;
+    std::unordered_map<lvr2::VertexHandle, int> vertexIndexMap;
+    std::vector<int> pathIndices;
+
+    // Collect vertices for all faces in F and assign indices
+    for (const auto& face : F) {
+        auto vertices = mesh.getVerticesOfFace(face);
+        V.insert(vertices.begin(), vertices.end());
+    }
+
+    int currentIndex = 1;
+    // Write vertices and normals, and map indices
+    for (const auto& vertex : V) {
+        auto position = mesh.getVertexPosition(vertex);
+        auto normal = vertex_normals[vertex];
+        vertexIndexMap[vertex] = currentIndex;
+        objFile << "v " << position.x << " " << position.y << " " << position.z << "\n";
+        objFile << "vn " << normal.x << " " << normal.y << " " << normal.z << "\n";
+        currentIndex++;
+    }
+
+    // Write faces using mapped indices
+    for (const auto& face : F) {
+        objFile << "f";
+        auto vertices = mesh.getVerticesOfFace(face);
+        for (const auto& vertex : vertices) {
+            int index = vertexIndexMap[vertex];
+            objFile << " " << index << "//" << index;
+        }
+        objFile << "\n";
+    }
+
+    // Handle path indices by looking up each vertex in the path
+    for (const auto& vertex : path) {
+        if (vertexIndexMap.find(vertex) != vertexIndexMap.end()) {
+            pathIndices.push_back(vertexIndexMap[vertex]);
+        }
+    }
+
+    objFile.close();
+
+    return {filename, pathIndices};
+}
+
 
 } /* namespace kinodynamic_wavefront_planner */

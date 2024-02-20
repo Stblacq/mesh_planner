@@ -26,10 +26,11 @@ public:
   virtual float getKinodynamicCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
   virtual std::vector<lvr2::VertexHandle> getAdjacentVertices(const lvr2::VertexHandle& vertex);
   virtual std::vector<lvr2::VertexHandle> findMinimalCostPath(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, std::function<double(const lvr2::VertexHandle&, const lvr2::VertexHandle&)> cost_function);
-  virtual nav_msgs::Path getPathFromPoints(const std::vector<lvr2::VertexHandle> &path);
+  virtual nav_msgs::Path getNavPathFromVertices(const std::vector<lvr2::VertexHandle> &path);
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getSteeringAngleCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
   virtual nav_msgs::Path getCvpPath(std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost);
+  virtual std::pair<std::string, std::vector<int>> createMeshObjAndPathIndices(const std::unordered_map<lvr2::VertexHandle, bool>& visited,const std::vector<lvr2::VertexHandle>& path);
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
    */

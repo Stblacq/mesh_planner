@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(kinodynamic_wavefront_planner)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_subdirectory(geometry-central)
 
 find_package(catkin REQUIRED COMPONENTS
   mbf_mesh_core
@@ -43,6 +45,7 @@ add_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${JSONCPP_LIBRARIES}
+  geometry-central
 )
 
 install(TARGETS ${PROJECT_NAME}
