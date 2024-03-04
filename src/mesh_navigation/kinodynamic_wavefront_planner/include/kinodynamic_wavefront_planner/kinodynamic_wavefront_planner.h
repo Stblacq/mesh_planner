@@ -30,9 +30,9 @@ public:
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getSteeringAngleCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
   virtual nav_msgs::Path getCvpPath(std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost);
-  virtual std::pair<std::string, std::vector<int>> createMeshObjAndPathIndices(const std::unordered_map<lvr2::VertexHandle, bool>& visited,const std::vector<lvr2::VertexHandle>& path);
-  virtual std::vector<mesh_map::Vector> findKinoCVP(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, double stepSize);
-  
+
+  virtual nav_msgs::Path getBsplinePath(const std::vector<lvr2::VertexHandle>& path);
+  virtual Eigen::Vector3d getPosition(const lvr2::VertexHandle& vertex_handle);
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
    */

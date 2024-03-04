@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(kinodynamic_wavefront_planner)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -14,7 +14,10 @@ find_package(catkin REQUIRED COMPONENTS
   wave_front_planner
 )
 
+find_package(Eigen3 REQUIRED)
+
 find_package(PkgConfig REQUIRED)
+
 pkg_check_modules(JSONCPP jsoncpp)
 
 generate_dynamic_reconfigure_options(
@@ -30,10 +33,12 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${Eigen3_INCLUDE_DIRS} 
 )
 
 add_library(${PROJECT_NAME}
   src/kinodynamic_wavefront_planner.cpp
+  src/uniform_bspline.cpp
 )
 
 add_dependencies(${PROJECT_NAME}
