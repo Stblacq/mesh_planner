@@ -21,6 +21,7 @@
 #include "kinodynamic_wavefront_planner/kinodynamic_wavefront_planner.h"
 #include "kinodynamic_wavefront_planner/uniform_bspline.h"
 
+#include "explore_mesh.cpp"
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -56,7 +57,7 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
   std::vector<lvr2::VertexHandle> path_points_2 = findMinimalCostPath(start_vec,
    goal_vec,
-   [this](const lvr2::VertexHandle& from, const lvr2::VertexHandle& to) -> float {
+   [this](const mesh_map::Vector& from, const mesh_map::Vector& to) -> float {
         return this->getSteeringAngleCost(from, to);
     });
   nav_msgs::Path min_steering_path = getNavPathFromVertices(path_points_2);
@@ -88,11 +89,28 @@ float KinodynamicWavefrontPlanner::getKinodynamicCost(const lvr2::VertexHandle& 
 }
 
 
-float KinodynamicWavefrontPlanner::getSteeringAngleCost(const lvr2::VertexHandle& from,
- const lvr2::VertexHandle& to) {
+// float KinodynamicWavefrontPlanner::getSteeringAngleCost(const lvr2::VertexHandle& from,
+//  const lvr2::VertexHandle& to) {
+//     const auto& mesh = mesh_map->mesh();
+//     auto p_from = mesh.getVertexPosition(from);
+//     auto p_to = mesh.getVertexPosition(to);
+//     std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
+//     std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
+//     double steering_angle = calculateSteeringAngle(current_state, next_state,2,0.1);
+
+//      // Normalize steering_angle to be within [0, 2π]
+//     steering_angle = fmod(steering_angle + 2 * M_PI, 2 * M_PI);
+
+//     // Map the steering angle from [0, 2π] to [0, 1]
+//     double normalized_steering_angle = steering_angle / (2 * M_PI);
+//     return normalized_steering_angle;
+// }
+
+float KinodynamicWavefrontPlanner::getSteeringAngleCost(const mesh_map::Vector& from,
+ const mesh_map::Vector& to) {
     const auto& mesh = mesh_map->mesh();
-    auto p_from = mesh.getVertexPosition(from);
-    auto p_to = mesh.getVertexPosition(to);
+    auto p_from = from;
+    auto p_to = to;
     std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
     std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
     double steering_angle = calculateSteeringAngle(current_state, next_state,2,0.1);
@@ -177,10 +195,171 @@ lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost) {
     return path_msg;
 }
 
+// std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath(
+//      const mesh_map::Vector& original_start,
+//      const mesh_map::Vector& original_goal,
+//      std::function<double(const lvr2::VertexHandle&, const lvr2::VertexHandle&)> cost_function) {
+
+//   // Access the mesh and the pre-computed vertex costs
+//   const auto& mesh = mesh_map->mesh();
+//   const auto& vertex_costs = mesh_map->vertexCosts();
+
+//   mesh_map::Vector start = original_start;
+//   mesh_map::Vector goal = original_goal;
+//   // Find the containing faces of start and goal, with error handling for optional values
+//   const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
+//   const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
+  
+//   std::array<lvr2::VertexHandle, 3> goal_vertices = mesh.getVerticesOfFace(goal_face);
+
+//   // Initialize the priority queue
+//   lvr2::Meap<lvr2::VertexHandle, float> pq;
+
+//   // Populate the priority queue with the vertices of the starting face and their costs
+//   for (auto vH : mesh.getVerticesOfFace(start_face)) {
+//     pq.insert(vH, vertex_costs[vH]);
+//   }
+
+//   // To keep track of visited vertices to avoid revisiting
+//   std::unordered_map<lvr2::VertexHandle, bool> visited;
+
+//   // To keep track of the path
+//   std::unordered_map<lvr2::VertexHandle, lvr2::VertexHandle> predecessors;
+
+//   while (!pq.isEmpty()) {
+//     auto pair = pq.popMin();
+//     auto current_vh = pair.key(); 
+//     // Mark the current vertex as visited
+//     visited[current_vh] = true;
+
+//     // Check if the current vertex is one of the goal vertices
+//     if (current_vh == goal_vertices[0] || current_vh == goal_vertices[1] || current_vh == goal_vertices[2]) {
+//       ROS_INFO(">>>>>>>>>>>>Wavefront reached the goal!");
+//       break; // Goal reached
+//     }
+
+//     // Explore neighbors
+//     std::vector<lvr2::VertexHandle> neighbors = getAdjacentVertices(current_vh);
+//     for (auto neighbor : neighbors) {
+//       if (visited[neighbor]) continue; // Skip visited neighbors
+
+//       if (!pq.containsKey(neighbor)) {
+//         float neighbour_cost =  vertex_costs[neighbor] + cost_function(current_vh,neighbor);
+//         pq.insert(neighbor, neighbour_cost);
+//         predecessors.emplace(neighbor, current_vh);
+//       }
+//     }
+//   }
+
+//   // Reconstruct the path from the goal to the start
+
+// std::vector<lvr2::VertexHandle> path;
+
+// // Start from a goal vertex that has been reached and is in predecessors
+// for (auto gv : goal_vertices) {
+//     auto it = predecessors.find(gv);
+//     if (it != predecessors.end()) {
+//         auto v = gv;
+        
+//         while (it != predecessors.end()) {
+//             path.push_back(v); // Add the current vertex to the path
+//             v = it->second; // Move to the predecessor of the current vertex
+//             it = predecessors.find(v); // Update iterator to the predecessor
+//         }
+        
+//         // After the loop, 'v' will be the start vertex, add it if not already included
+//         if (path.empty() || path.back() != v) {
+//             path.push_back(v);
+//         }
+        
+//         break;
+//     }
+// }
+
+// std::reverse(path.begin(), path.end());
+
+// return path;
+// }
+
+
+std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::generateNewPositions(const mesh_map::Vector& original_start, float step_size,
+int sample_size) {
+          ROS_INFO(">>>>>>>>>>>>1");
+
+    std::vector<mesh_map::Vector> new_positions;
+    mesh_map::Vector start = original_start;
+          ROS_INFO(">>>>>>>>>>>>2");
+
+    const auto& mesh = mesh_map->mesh();
+              ROS_INFO(">>>>>>>>>>>>3");
+
+    lvr2::FaceHandle face = mesh_map->getContainingFace(start, 0.4).unwrap();
+              ROS_INFO(">>>>>>>>>>>>4");
+
+    std::array<lvr2::VertexHandle, 3> vertices = mesh.getVerticesOfFace(face);
+              ROS_INFO(">>>>>>>>>>>>5");
+
+    std::vector<Eigen::Vector3d> vertex_positions;
+    ROS_INFO(">>>>>>>>>>>>6");
+
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        ROS_INFO(">>>>>>>>>>>>7");
+
+        mesh_map::Vector vertex_position = mesh.getVertexPosition(vertices[i]);
+        ROS_INFO(">>>>>>>>>>>>8");
+
+        vertex_positions.push_back(Eigen::Vector3d(vertex_position.x, vertex_position.y, vertex_position.z));
+        ROS_INFO(">>>>>>>>>>>>9");
+    }
+
+    const Vector3d current_position = {start.x, start.y, start.z};
+    std::vector<Vector3d> directions = getPossibleDirections(vertex_positions,current_position,std::ceil(step_size), sample_size);
+                    ROS_INFO(">>>>>>>>>>>>10");
+
+    for (const Vector3d& direction : directions) {
+        Vector3d new_possible_pos = (current_position + direction)*step_size;
+                    ROS_INFO(">>>>>>>>>>>>11");
+
+        mesh_map::Vector possible_pos;
+        possible_pos.x  = new_possible_pos[0];
+        possible_pos.y  = new_possible_pos[1];
+        possible_pos.z  = new_possible_pos[2];
+                            ROS_INFO(">>>>>>>>>>>>12");
+
+        if (auto search_res_opt = mesh_map->searchNeighbourFaces(possible_pos, face, step_size, 0.4)) {
+                                ROS_INFO(">>>>>>>>>>>>13");
+
+            auto search_res = *search_res_opt;
+                                ROS_INFO(">>>>>>>>>>>>14");
+
+            face = std::get<0>(search_res);
+                                ROS_INFO(">>>>>>>>>>>>15");
+
+            std::array<mesh_map::Vector, 3> vertices = std::get<1>(search_res);
+                                ROS_INFO(">>>>>>>>>>>>16");
+
+            std::array<float, 3> bary_coords = std::get<2>(search_res);
+                    ROS_INFO(">>>>>>>>>>>>17");
+
+            // Project position onto surface
+            mesh_map::Vector new_pos = mesh_map::linearCombineBarycentricCoords(vertices, bary_coords);
+                                ROS_INFO(">>>>>>>>>>>>18");
+
+            new_positions.push_back(new_pos);
+                                            ROS_INFO(">>>>>>>>>>>>19");
+
+        }
+    }
+                                ROS_INFO(">>>>>>>>>>>>20");
+
+    return new_positions;
+}
+
+
 std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath(
      const mesh_map::Vector& original_start,
      const mesh_map::Vector& original_goal,
-     std::function<double(const lvr2::VertexHandle&, const lvr2::VertexHandle&)> cost_function) {
+     std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> cost_function) {
 
   // Access the mesh and the pre-computed vertex costs
   const auto& mesh = mesh_map->mesh();
@@ -189,31 +368,44 @@ std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath
   mesh_map::Vector start = original_start;
   mesh_map::Vector goal = original_goal;
   // Find the containing faces of start and goal, with error handling for optional values
-  const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
-  const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
+  const lvr2::FaceHandle& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
+  const lvr2::FaceHandle& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
   
+  std::array<lvr2::VertexHandle, 3> start_vertices = mesh.getVerticesOfFace(start_face);
   std::array<lvr2::VertexHandle, 3> goal_vertices = mesh.getVerticesOfFace(goal_face);
 
   // Initialize the priority queue
   lvr2::Meap<lvr2::VertexHandle, float> pq;
 
   // Populate the priority queue with the vertices of the starting face and their costs
-  for (auto vH : mesh.getVerticesOfFace(start_face)) {
+  for (lvr2::VertexHandle vH :start_vertices) {
     pq.insert(vH, vertex_costs[vH]);
   }
 
+  std::array<mesh_map::Vector, 3> vertex_positions;
+
+  for (size_t i = 0; i < start_vertices.size(); ++i) {
+        mesh_map::Vector vertex_position = mesh.getVertexPosition(start_vertices[i]);
+        vertex_positions[i]= vertex_position;
+    }
   // To keep track of visited vertices to avoid revisiting
   std::unordered_map<lvr2::VertexHandle, bool> visited;
 
   // To keep track of the path
   std::unordered_map<lvr2::VertexHandle, lvr2::VertexHandle> predecessors;
 
+  std::array<float, 3> barycentric_coords;
+  float dist;
+  mesh_map::projectedBarycentricCoords(start, vertex_positions, barycentric_coords, dist);
+  float vectorFieldCost = mesh_map->costAtPosition(start_vertices,barycentric_coords);
+  	
+  std::vector<mesh_map::Vector>  n = generateNewPositions(start, 1,10);
+
   while (!pq.isEmpty()) {
     auto pair = pq.popMin();
     auto current_vh = pair.key(); 
     // Mark the current vertex as visited
     visited[current_vh] = true;
-
     // Check if the current vertex is one of the goal vertices
     if (current_vh == goal_vertices[0] || current_vh == goal_vertices[1] || current_vh == goal_vertices[2]) {
       ROS_INFO(">>>>>>>>>>>>Wavefront reached the goal!");
@@ -226,7 +418,7 @@ std::vector<lvr2::VertexHandle> KinodynamicWavefrontPlanner::findMinimalCostPath
       if (visited[neighbor]) continue; // Skip visited neighbors
 
       if (!pq.containsKey(neighbor)) {
-        float neighbour_cost =  vertex_costs[neighbor] + cost_function(current_vh,neighbor);
+        float neighbour_cost =  vertex_costs[neighbor] + cost_function( mesh.getVertexPosition(current_vh), mesh.getVertexPosition(neighbor));
         pq.insert(neighbor, neighbour_cost);
         predecessors.emplace(neighbor, current_vh);
       }
