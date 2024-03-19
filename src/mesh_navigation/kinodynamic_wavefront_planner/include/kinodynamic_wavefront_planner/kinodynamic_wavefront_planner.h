@@ -24,16 +24,15 @@ public:
 
   virtual uint32_t makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, double& cost, std::string& message) override;
   virtual float getKinodynamicCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
-  virtual std::vector<lvr2::VertexHandle> getAdjacentVertices(const lvr2::VertexHandle& vertex);
-  virtual std::vector<lvr2::VertexHandle> findMinimalCostPath(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> cost_function);
-  virtual nav_msgs::Path getNavPathFromVertices(const std::vector<lvr2::VertexHandle> &path);
+  virtual std::vector<mesh_map::Vector> getAdjacentVertices(const mesh_map::Vector& vertex,  int pointsPerEdge);
+  virtual std::vector<mesh_map::Vector> findMinimalCostPath(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> cost_function);
+  virtual nav_msgs::Path getNavPathFromVertices(const std::vector<mesh_map::Vector> &path);
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getSteeringAngleCost(const mesh_map::Vector& from, const mesh_map::Vector& to);
   virtual nav_msgs::Path getCvpPath(std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost);
-
+  virtual float calculateCostAtPosition(const mesh_map::Vector& position); 
   virtual nav_msgs::Path getBsplinePath(const std::vector<lvr2::VertexHandle>& path);
   virtual Eigen::Vector3d getPosition(const lvr2::VertexHandle& vertex_handle);
-  virtual std::vector<mesh_map::Vector> generateNewPositions(const mesh_map::Vector& original_start, float step_size,int sample_size);
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
    */

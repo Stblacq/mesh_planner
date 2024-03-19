@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_subdirectory(geometry-central)
-
 find_package(catkin REQUIRED COMPONENTS
   mbf_mesh_core
   mbf_utility
@@ -50,7 +48,6 @@ add_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${JSONCPP_LIBRARIES}
-  geometry-central
 )
 
 install(TARGETS ${PROJECT_NAME}
