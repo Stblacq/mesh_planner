@@ -33,6 +33,7 @@ public:
   virtual float calculateCostAtPosition(const mesh_map::Vector& position); 
   virtual nav_msgs::Path getBsplinePath(const std::vector<lvr2::VertexHandle>& path);
   virtual Eigen::Vector3d getPosition(const lvr2::VertexHandle& vertex_handle);
+  virtual void  savePathAndNormals(const std::vector<mesh_map::Vector>& path, const std::string& pathFileName, const std::string& normalsFileName);
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
    */

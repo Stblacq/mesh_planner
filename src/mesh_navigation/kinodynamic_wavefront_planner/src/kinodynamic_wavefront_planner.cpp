@@ -242,56 +242,127 @@ float KinodynamicWavefrontPlanner::calculateCostAtPosition(const mesh_map::Vecto
     return cost;
 }
 
+
+void saveVectorToFile(const std::vector<Eigen::Vector3d>& vec, const std::string& filepath) {
+    std::ofstream outFile(filepath);
+
+    if (!outFile.is_open()) {
+        std::cerr << "Failed to open file: " << filepath << std::endl;
+        return;
+    }
+
+    for (const auto& v : vec) {
+        outFile << v(0) << ", " << v(1) << ", " << v(2) << "\n"; 
+    }
+
+    outFile.close();
+}
+
+
+void  KinodynamicWavefrontPlanner::savePathAndNormals(const std::vector<mesh_map::Vector>& path,
+  const std::string& pathFileName,
+   const std::string& normalsFileName) {
+
+    std::vector<Eigen::Vector3d> positions;
+    std::vector<Eigen::Vector3d> normals;
+
+    for (const auto& position : path) {
+        auto position_ = position;
+        const auto& face_normals = mesh_map->faceNormals();
+        const lvr2::FaceHandle face = mesh_map->getContainingFace(position_, 0.4).unwrap();
+        mesh_map::Normal normal = face_normals[face];
+        
+        positions.push_back(Eigen::Vector3d(position.x, position.y, position.z));
+        normals.push_back(Eigen::Vector3d(normal.x, normal.y, normal.z));
+    }
+    saveVectorToFile(positions, pathFileName);
+    saveVectorToFile(normals, normalsFileName);
+
+}
+
+std::vector<Eigen::Vector3d> convertPath(const std::vector<mesh_map::Vector>& path) {
+    std::vector<Eigen::Vector3d> convertedPath;
+    convertedPath.reserve(path.size());
+    
+    for (const auto& point : path) {
+        Eigen::Vector3d eigenPoint(point.x, point.y, point.z);
+        convertedPath.push_back(eigenPoint);
+    }
+    
+    return convertedPath;
+}
+
+std::vector<mesh_map::Vector> convertBack(const std::vector<Eigen::Vector3d>& convertedPath) {
+    std::vector<mesh_map::Vector> path;
+    path.reserve(convertedPath.size());
+
+    for (const auto& eigenPoint : convertedPath) {
+        mesh_map::Vector point;
+        point.x = eigenPoint[0];
+        point.y = eigenPoint[1];
+        point.z = eigenPoint[2];
+        path.push_back(point);
+    }
+
+    return path;
+}
+
+std::vector<Eigen::Vector3d> smoothPath(const std::vector<Eigen::Vector3d>& path, 
+int iterations = 5, double neighbor_weight = 0.1) {
+
+    std::vector<Eigen::Vector3d> smoothed_path = path;
+    for (int iter = 0; iter < iterations; ++iter) {
+        std::vector<Eigen::Vector3d> temp_path = smoothed_path;
+        for (size_t i = 1; i < path.size() - 1; ++i) {
+            const Eigen::Vector3d& prev_point = smoothed_path[i - 1];
+            const Eigen::Vector3d& next_point = smoothed_path[i + 1];
+            temp_path[i] = (1 - 2 * neighbor_weight) * smoothed_path[i] + neighbor_weight * (prev_point + next_point);
+        }
+        smoothed_path = std::move(temp_path);
+    }
+    return smoothed_path;
+}
+
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
      const mesh_map::Vector& original_start,
      const mesh_map::Vector& original_goal,
      std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> cost_function) {
 
-  // Access the mesh and the pre-computed vertex costs
   const auto& mesh = mesh_map->mesh();
   const auto& vertex_costs = mesh_map->vertexCosts();
 
   mesh_map::Vector start = original_start;
   mesh_map::Vector goal = original_goal;
-  // Find the containing faces of start and goal, with error handling for optional values
+
   const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
   const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
   
   std::array<mesh_map::Vector, 3> goal_positions = mesh.getVertexPositionsOfFace(goal_face);
-  // Initialize the priority queue
+
   lvr2::Meap<mesh_map::Vector, float> pq;
+  pq.insert(start, 0);
 
-  // Populate the priority queue with the vertices of the starting face and their costs, converted to Vector
-  for (const auto& vh : mesh.getVerticesOfFace(start_face)) {
-    mesh_map::Vector pos = mesh.getVertexPosition(vh);
-    lvr2::VertexHandle vH = mesh_map->getNearestVertexHandle(pos).unwrap();
-    pq.insert(pos, vertex_costs[vH]);
-  }
 
-  // To keep track of visited positions to avoid revisiting
   std::unordered_map<mesh_map::Vector, bool, VectorHash> visited;
 
-  // To keep track of the path
   std::unordered_map<mesh_map::Vector, mesh_map::Vector, VectorHash> predecessors;
 
   while (!pq.isEmpty()) {
     auto pair = pq.popMin();
     auto current_pos = pair.key(); 
-    // Mark the current position as visited
     visited[current_pos] = true;
 
-    // Check if the current position is one of the goal positions
+
     for (const auto& goal_pos : goal_positions) {
         if (current_pos == goal_pos) {
             ROS_INFO(">>>>>>>>>>>>Wavefront reached the goal!");
-            goto reconstruct_path; // Goal reached, proceed to path reconstruction
+            goto reconstruct_path;
         }
     }
 
-    // Explore neighbors, which are now returned as Vector types
     std::vector<mesh_map::Vector> neighbors = getAdjacentVertices(current_pos,20);
     for (const auto& neighbor : neighbors) {
-      if (visited[neighbor]) continue; // Skip visited neighbors
+      if (visited[neighbor]) continue; 
 
       if (!pq.containsKey(neighbor)) {
         lvr2::VertexHandle neighbor_vh = mesh_map->getNearestVertexHandle(neighbor).unwrap();
@@ -304,17 +375,16 @@ std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
 
 reconstruct_path:
   std::vector<mesh_map::Vector> path;
-
-  // Start from a goal position that has been reached and is in predecessors
+  path.push_back(goal);
   for (const auto& goal_pos : goal_positions) {
       auto it = predecessors.find(goal_pos);
       if (it != predecessors.end()) {
           auto pos = goal_pos;
           
           while (it != predecessors.end()) {
-              path.push_back(pos); // Add the current position to the path
-              pos = it->second; // Move to the predecessor of the current position
-              it = predecessors.find(pos); // Update iterator to the predecessor
+              path.push_back(pos);
+              pos = it->second;
+              it = predecessors.find(pos);
           }
           
           break;
@@ -322,8 +392,14 @@ reconstruct_path:
   }
 
   std::reverse(path.begin(), path.end());
+//   savePathAndNormals(path,"path_data.txt","normal_data.txt");
 
-  return path;
+ std::vector<Eigen::Vector3d> eigenPath =  convertPath(path);
+ std::vector<Eigen::Vector3d> smooth_path = smoothPath(eigenPath);
+
+ std::vector<mesh_map::Vector> final_path =  convertBack(smooth_path);
+
+  return final_path;
 }
 
 
