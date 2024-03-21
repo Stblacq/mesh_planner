@@ -56,7 +56,7 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
   
   nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
-  plan = cvp_path.poses;
+  plan = min_steering_path.poses;
   path_pub.publish(cvp_path);
   
   path_pub2.publish(min_steering_path);
@@ -333,6 +333,9 @@ std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
 
   mesh_map::Vector start = original_start;
   mesh_map::Vector goal = original_goal;
+    // ROS_INFO(">>>>>>>>>>>>Start %f - %f - %f",start.x,start.y,start.z);
+    // ROS_INFO(">>>>>>>>>>>>Start %f - %f - %f",goal.x,goal.y,goal.z);
+
 
   const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
   const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();

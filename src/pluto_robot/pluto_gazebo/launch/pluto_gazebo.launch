@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <launch>
   <arg name="world_name" default="$(find gazebo_ros)/worlds/empty.world"/>
-  <arg name="paused" default="false"/>
+  <arg name="paused" default="true"/>
   <arg name="use_sim_time" default="true"/>
   <arg name="extra_gazebo_args" default=""/>
-  <arg name="gui" default="false"/>
+  <arg name="gui" default="true"/>
   <arg name="recording" default="false"/>
 
   <!-- Robot pose -->

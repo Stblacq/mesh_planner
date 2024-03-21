@@ -2,9 +2,11 @@
 <launch>
   <include file="$(find pluto_gazebo)/launch/pluto_gazebo.launch">
     <arg name="world_name" value="$(find pluto_gazebo)/worlds/botanical_garden.world"/>
-    <arg name="x" value="-1.2"/>
-    <arg name="y" value="-2.00"/>
-    <arg name="z" value="-1.30"/>
-    <arg name="yaw" value="-1.55"/>
+    <arg name="x" value="2.141644"/>
+    <arg name="y" value="-2.800703"/>
+    <arg name="z" value="-1.352090"/>
+     <arg name="roll" default="0.069979"/>
+    <arg name="pitch" default="0.025472"/>
+    <arg name="yaw" default="0.472471"/>
   </include>
 </launch>
