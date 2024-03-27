@@ -388,27 +388,27 @@ Eigen::Vector3d KinodynamicWavefrontPlanner::getPosition(const lvr2::VertexHandl
 }
 
 nav_msgs::Path KinodynamicWavefrontPlanner::getBsplinePath(const std::vector<mesh_map::Vector>& path) {
-
     Eigen::MatrixXd points(3, path.size());
     for (size_t i = 0; i < path.size(); ++i) {
         mesh_map::Vector position = path[i];
-        Eigen::Vector3d pos =  Eigen::Vector3d(position.x, position.y, position.z);
-        points.col(i) = pos;
+        points.col(i) = Eigen::Vector3d(position.x, position.y, position.z);
     }
 
     int order = 3;
     double interval = 1.0;
 
     UniformBspline bspline(points, order, interval);
-
     nav_msgs::Path nav_path;
     nav_path.header.frame_id = mesh_map->mapFrame();
     nav_path.header.stamp = ros::Time::now();
 
-    for (int i = 0; i <= 100; ++i) {
-        double u = bspline.getKnot().minCoeff() + (bspline.getKnot().maxCoeff() - bspline.getKnot().minCoeff()) * i / 100.0;
+    double uStart = bspline.getKnot().minCoeff();
+    double uEnd = bspline.getKnot().maxCoeff();
+    double dynamicStepSize = 0.01;
+
+    for (double u = uStart; u <= uEnd; u += dynamicStepSize) {
         Eigen::VectorXd point = bspline.evaluateDeBoor(u);
-        
+
         geometry_msgs::PoseStamped pose_stamped;
         pose_stamped.header.frame_id = nav_path.header.frame_id;
         pose_stamped.header.stamp = ros::Time::now();
@@ -427,6 +427,7 @@ nav_msgs::Path KinodynamicWavefrontPlanner::getBsplinePath(const std::vector<mes
     }
     return nav_path;
 }
+
 
 nav_msgs::Path KinodynamicWavefrontPlanner::getNavPathFromVectors(const std::vector<mesh_map::Vector> &path) {
     const auto& mesh = mesh_map->mesh();
