@@ -52,18 +52,19 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
    [this](const mesh_map::Vector& from, const mesh_map::Vector& to) -> float {
         return this->getSteeringAngleCost(from, to);
     });
-  nav_msgs::Path min_steering_path = getNavPathFromVertices(path_points_2);
+  nav_msgs::Path min_steering_path = getNavPathFromVectors(path_points_2);
+  auto bsp_path = getBsplinePath(path_points_2);
+
+  path_pub.publish(bsp_path);
   
   nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
   plan = min_steering_path.poses;
-  path_pub.publish(cvp_path);
+//   path_pub1.publish(min_steering_path);
   
-  path_pub2.publish(min_steering_path);
+  path_pub2.publish(cvp_path);
 
-//   auto bsp_path = getBsplinePath(path_points_2);
-
-//   path_pub1.publish(bsp_path);
+  
   mesh_map->publishVertexCosts(potential, "Potential");
   ROS_INFO_STREAM("Path length: " << cost << "m");
 
@@ -82,23 +83,28 @@ float KinodynamicWavefrontPlanner::getKinodynamicCost(const lvr2::VertexHandle& 
 
 
 
-float KinodynamicWavefrontPlanner::getSteeringAngleCost(const mesh_map::Vector& from,
- const mesh_map::Vector& to) {
+float KinodynamicWavefrontPlanner::getSteeringAngleCost(const mesh_map::Vector& from, const mesh_map::Vector& to) {
     const auto& mesh = mesh_map->mesh();
     auto p_from = from;
     auto p_to = to;
     std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
     std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
-    double steering_angle = calculateSteeringAngle(current_state, next_state,2,0.1);
 
-     // Normalize steering_angle to be within [0, 2π]
-    steering_angle = fmod(steering_angle + 2 * M_PI, 2 * M_PI);
+    const double min_angle = -M_PI / 3; // Example: -30 degrees
+    const double max_angle = M_PI / 3;  // Example: 30 degrees
 
-    // Map the steering angle from [0, 2π] to [0, 1]
-    double normalized_steering_angle = steering_angle / (2 * M_PI);
-    return normalized_steering_angle;
+    double steering_angle = calculateSteeringAngle(current_state, next_state, 2, 0.1);
+
+    if (steering_angle < min_angle || steering_angle > max_angle) {
+        return 5.0;
+    }
+
+    double normalized_value = (steering_angle - min_angle) / (max_angle - min_angle);
+
+    double cost = normalized_value;
+
+    return static_cast<float>(cost);
 }
-
 
 
 struct VectorHash {
@@ -111,35 +117,6 @@ bool operator==(const mesh_map::Vector& a, const mesh_map::Vector& b) {
 return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
-// std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::getAdjacentVertices(const mesh_map::Vector& position)
-// {
-//     std::vector<mesh_map::Vector> adjacentPositions;
-//     const auto& mesh = mesh_map->mesh();
-//     lvr2::VertexHandle vertex = mesh_map->getNearestVertexHandle(position).unwrap();
-
-//     try
-//     {
-//         std::vector<lvr2::EdgeHandle> connectedEdges;
-//         mesh.getEdgesOfVertex(vertex, connectedEdges);
-
-//         for (const auto& edge : connectedEdges)
-//         {
-//             std::array<lvr2::VertexHandle, 2> vertices = mesh.getVerticesOfEdge(edge);
-//             for (const auto& vert : vertices) {
-//             if (vert != vertex) {
-//                 mesh_map::Vector pos = mesh.getVertexPosition(vert);
-//                 adjacentPositions.push_back(pos);
-//             }
-//         }
-//     }
-// }
-// catch (const std::exception& e)
-// {
-//     ROS_ERROR_STREAM("Error in getAdjacentVertices: " << e.what());
-// }
-
-// return adjacentPositions;
-// }
 
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::getAdjacentVertices(const mesh_map::Vector& position, int pointsPerEdge)
 {
@@ -333,9 +310,7 @@ std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
 
   mesh_map::Vector start = original_start;
   mesh_map::Vector goal = original_goal;
-    // ROS_INFO(">>>>>>>>>>>>Start %f - %f - %f",start.x,start.y,start.z);
-    // ROS_INFO(">>>>>>>>>>>>Start %f - %f - %f",goal.x,goal.y,goal.z);
-
+  
 
   const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
   const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
@@ -397,12 +372,12 @@ reconstruct_path:
   std::reverse(path.begin(), path.end());
 //   savePathAndNormals(path,"path_data.txt","normal_data.txt");
 
- std::vector<Eigen::Vector3d> eigenPath =  convertPath(path);
- std::vector<Eigen::Vector3d> smooth_path = smoothPath(eigenPath);
+//  std::vector<Eigen::Vector3d> eigenPath =  convertPath(path);
+//  std::vector<Eigen::Vector3d> smooth_path = smoothPath(eigenPath);
 
- std::vector<mesh_map::Vector> final_path =  convertBack(smooth_path);
+//  std::vector<mesh_map::Vector> final_path =  convertBack(smooth_path);
 
-  return final_path;
+  return path;
 }
 
 
@@ -412,11 +387,12 @@ Eigen::Vector3d KinodynamicWavefrontPlanner::getPosition(const lvr2::VertexHandl
     return Eigen::Vector3d(position.x, position.y, position.z);
 }
 
-nav_msgs::Path KinodynamicWavefrontPlanner::getBsplinePath(const std::vector<lvr2::VertexHandle>& path) {
+nav_msgs::Path KinodynamicWavefrontPlanner::getBsplinePath(const std::vector<mesh_map::Vector>& path) {
 
     Eigen::MatrixXd points(3, path.size());
     for (size_t i = 0; i < path.size(); ++i) {
-        Eigen::Vector3d pos = getPosition(path[i]);
+        mesh_map::Vector position = path[i];
+        Eigen::Vector3d pos =  Eigen::Vector3d(position.x, position.y, position.z);
         points.col(i) = pos;
     }
 
@@ -452,7 +428,7 @@ nav_msgs::Path KinodynamicWavefrontPlanner::getBsplinePath(const std::vector<lvr
     return nav_path;
 }
 
-nav_msgs::Path KinodynamicWavefrontPlanner::getNavPathFromVertices(const std::vector<mesh_map::Vector> &path) {
+nav_msgs::Path KinodynamicWavefrontPlanner::getNavPathFromVectors(const std::vector<mesh_map::Vector> &path) {
     const auto& mesh = mesh_map->mesh();
     const auto& vertex_normals = mesh_map->vertexNormals();
 

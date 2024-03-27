@@ -26,12 +26,12 @@ public:
   virtual float getKinodynamicCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
   virtual std::vector<mesh_map::Vector> getAdjacentVertices(const mesh_map::Vector& vertex,  int pointsPerEdge);
   virtual std::vector<mesh_map::Vector> findMinimalCostPath(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> cost_function);
-  virtual nav_msgs::Path getNavPathFromVertices(const std::vector<mesh_map::Vector> &path);
+  virtual nav_msgs::Path getNavPathFromVectors(const std::vector<mesh_map::Vector> &path);
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getSteeringAngleCost(const mesh_map::Vector& from, const mesh_map::Vector& to);
   virtual nav_msgs::Path getCvpPath(std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost);
   virtual float calculateCostAtPosition(const mesh_map::Vector& position); 
-  virtual nav_msgs::Path getBsplinePath(const std::vector<lvr2::VertexHandle>& path);
+  virtual nav_msgs::Path getBsplinePath(const std::vector<mesh_map::Vector>& path);
   virtual Eigen::Vector3d getPosition(const lvr2::VertexHandle& vertex_handle);
   virtual void  savePathAndNormals(const std::vector<mesh_map::Vector>& path, const std::string& pathFileName, const std::string& normalsFileName);
   /**
