@@ -7,7 +7,7 @@
   <arg name="map_config" default="$(arg dir)/$(arg dataset)_map.yaml" />
   <arg name="nav_config" default="$(arg dir)/$(arg dataset)_nav.yaml" />
   <arg name="part" default="mesh" />
-  <arg name="planner_patience" default="10"/>
+  <arg name="planner_patience" default="30"/>
 
   <node name="move_base_flex" pkg="mbf_mesh_nav" type="mbf_mesh_nav" output="screen">
     <rosparam command="load" file="$(find pluto_navigation)/$(arg nav_config)"/>
