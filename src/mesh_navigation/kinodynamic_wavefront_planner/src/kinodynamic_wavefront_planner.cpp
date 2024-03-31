@@ -304,116 +304,134 @@ int iterations = 5, double neighbor_weight = 0.1) {
     }
     return smoothed_path;
 }
-struct CompareCost {
-    bool operator()(const std::pair<float, mesh_map::Vector>& a, const std::pair<float, mesh_map::Vector>& b) const {
-        return a.first > b.first; // Use '>' to create a min heap
+
+// struct CompareCost {
+//     bool operator()(const std::pair<float, mesh_map::Vector>& a, const std::pair<float, mesh_map::Vector>& b) const {
+//         return a.first > b.first; // Use '>' to create a min heap
+//     }
+// };
+
+// struct VectorHash {
+// size_t operator()(const mesh_map::Vector& v) const {
+// return std::hash<float>()(v.x) ^ std::hash<float>()(v.y) ^ std::hash<float>()(v.z);
+// }
+// };
+
+// bool operator==(const mesh_map::Vector& a, const mesh_map::Vector& b) {
+// return a.x == b.x && a.y == b.y && a.z == b.z;
+// }
+
+struct State {
+    float x, y, z;
+    float qw, qx, qy, qz;
+
+    // Default constructor
+    State() : x(0), y(0), z(0), qw(0), qx(0), qy(0), qz(0) {}
+
+    // Constructor with parameters
+    State(float x, float y, float z, float qw, float qx, float qy, float qz)
+    : x(x), y(y), z(z), qw(qw), qx(qx), qy(qy), qz(qz) {}
+
+    // Equality operator to compare two State objects
+    bool operator==(const State& other) const {
+        return x == other.x && y == other.y && z == other.z &&
+               qw == other.qw && qx == other.qx && qy == other.qy && qz == other.qz;
     }
 };
 
-struct VectorHash {
-size_t operator()(const mesh_map::Vector& v) const {
-return std::hash<float>()(v.x) ^ std::hash<float>()(v.y) ^ std::hash<float>()(v.z);
-}
+struct StateHash {
+    size_t operator()(const State& s) const {
+        auto hash_combine = [](size_t lhs, size_t rhs) {
+            return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
+        };
+
+        size_t hash = std::hash<float>()(s.x);
+        hash = hash_combine(hash, std::hash<float>()(s.y));
+        hash = hash_combine(hash, std::hash<float>()(s.z));
+        hash = hash_combine(hash, std::hash<float>()(s.qw));
+        hash = hash_combine(hash, std::hash<float>()(s.qx));
+        hash = hash_combine(hash, std::hash<float>()(s.qy));
+        hash = hash_combine(hash, std::hash<float>()(s.qz));
+        return hash;
+    }
 };
 
-bool operator==(const mesh_map::Vector& a, const mesh_map::Vector& b) {
-return a.x == b.x && a.y == b.y && a.z == b.z;
-}
+struct CompareCost {
+    bool operator()(const std::pair<float, State>& a, const std::pair<float, State>& b) const {
+        return a.first > b.first;
+    }
+};
 
-// struct State {
-//     float x, y, z;
-//     float qw, qx, qy, qz; 
-
-//     State(float x, float y, float z, float qw, float qx, float qy, float qz)
-//     : x(x), y(y), z(z), qw(qw), qx(qx), qy(qy), qz(qz) {}
-
-//     bool operator==(const State& other) const {
-//         return x == other.x && y == other.y && z == other.z &&
-//                qw == other.qw && qx == other.qx && qy == other.qy && qz == other.qz;
-//     }
-// };
-
-// struct StateHash {
-//     size_t operator()(const State& s) const {
-//         auto hash_combine = [](size_t lhs, size_t rhs) {
-//             return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
-//         };
-
-//         size_t hash = std::hash<float>()(s.x);
-//         hash = hash_combine(hash, std::hash<float>()(s.y));
-//         hash = hash_combine(hash, std::hash<float>()(s.z));
-//         hash = hash_combine(hash, std::hash<float>()(s.qw));
-//         hash = hash_combine(hash, std::hash<float>()(s.qx));
-//         hash = hash_combine(hash, std::hash<float>()(s.qy));
-//         hash = hash_combine(hash, std::hash<float>()(s.qz));
-//         return hash;
-//     }
-// };
-
-// bool operator==(const State& a, const State& b) {
-//     return a.x == b.x && a.y == b.y && a.z == b.z &&
-//            a.qw == b.qw && a.qx == b.qx && a.qy == b.qy && a.qz == b.qz;
-// }
-
-// struct CompareCost {
-//     bool operator()(const std::pair<float, State>& a, const std::pair<float, State>& b) const {
-//         return a.first > b.first;
-//     }
-// };
 
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
     const geometry_msgs::PoseStamped& original_start,
     const geometry_msgs::PoseStamped& original_goal,
     std::function<double(const std::vector<double>&, const std::vector<double>&)> kino_dynamic_cost_function) {
     
-    // Setup and initialization
     const auto& mesh = mesh_map->mesh();
     const auto& vertex_costs = mesh_map->vertexCosts();
 
-    mesh_map::Vector start = mesh_map::toVector(original_start.pose.position);
-    mesh_map::Vector goal =  mesh_map::toVector(original_goal.pose.position);
+    geometry_msgs::Point start_point = original_start.pose.position;
+    geometry_msgs::Point goal_point = original_goal.pose.position;
 
-    const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
-    const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();
+    mesh_map::Vector start_vector = mesh_map::toVector(start_point);
+    mesh_map::Vector goal_vector = mesh_map::toVector(goal_point);
 
-    std::array<mesh_map::Vector, 3> goal_positions = mesh.getVertexPositionsOfFace(goal_face);
+    const auto& start_face = mesh_map->getContainingFace(start_vector, 0.4).unwrap();
+    const auto& goal_face = mesh_map->getContainingFace(goal_vector, 0.4).unwrap();
 
-    // Priority queue to select nodes for expansion based on their total cost (g(n) + h(n))
-    std::priority_queue<std::pair<float, mesh_map::Vector>, std::vector<std::pair<float, mesh_map::Vector>>, CompareCost> pq;
+    
+    State start = State(start_vector.x,start_vector.y, start_vector.z,0,0,0,0);
+    State goal =  State(goal_vector.x, goal_vector.y,  goal_vector.z,0,0,0,0);
+
+    
+    std::array<mesh_map::Vector, 3> goal_vectors = mesh.getVertexPositionsOfFace(goal_face);
+
+    std::array<State, 3> goal_positions;
+    for (size_t i = 0; i < goal_vectors.size(); ++i) {
+        goal_positions[i] = State(goal_vectors[i].x,goal_vectors[i].y,goal_vectors[i].z,0,0,0,0); 
+    }
+
+    std::priority_queue<std::pair<float, State>, std::vector<std::pair<float, State>>, CompareCost> pq;
     pq.push(std::make_pair(0.0, start));
 
-    std::unordered_map<mesh_map::Vector, float, VectorHash> cost_so_far;
+    std::unordered_map<State, float, StateHash> cost_so_far;
     cost_so_far[start] = 0.0;
 
-    std::unordered_map<mesh_map::Vector, bool, VectorHash> visited;
+    std::unordered_map<State, bool, StateHash> visited;
 
-    std::unordered_map<mesh_map::Vector, mesh_map::Vector, VectorHash> predecessors;
+    std::unordered_map<State, State, StateHash> predecessors;
 
     while (!pq.empty()) {
         auto current = pq.top();
         pq.pop();
-        auto current_pos = current.second;
+        State current_pos = current.second;
 
         if (visited[current_pos]) {
             continue;
         }
         visited[current_pos] = true;
 
-        for (const auto& goal_pos : goal_positions) {
+        for (const State& goal_pos : goal_positions) {
             if (current_pos == goal_pos) {
                 goto reconstruct_path; 
             }
         }
 
-        std::vector<mesh_map::Vector> neighbors = getAdjacentPositions(current_pos, 20);
-        for (const auto& neighbor : neighbors) {
+        std::vector<mesh_map::Vector> neighbors = getAdjacentPositions(mesh_map::Vector(current_pos.x,current_pos.y,current_pos.z), 20); // Assuming getAdjacentPositions now returns States
+        for (const mesh_map::Vector& neighbor_vec : neighbors) {
+            State neighbor = State(neighbor_vec.x,neighbor_vec.y,neighbor_vec.z,0,0,0,0);
+
             if (visited[neighbor]) continue;
+
             std::vector<double> current_state = {current_pos.x, current_pos.y, atan2(current_pos.y, current_pos.x)};
             std::vector<double> next_state = {neighbor.x, neighbor.y, atan2(neighbor.y, neighbor.x)};
+
             float new_cost = cost_so_far[current_pos] + kino_dynamic_cost_function(current_state, next_state);
+
             if (cost_so_far.find(neighbor) == cost_so_far.end() || new_cost < cost_so_far[neighbor]) {
                 cost_so_far[neighbor] = new_cost;
-                float priority = new_cost + vectorFieldCost(neighbor); 
+                float priority = new_cost + vectorFieldCost(neighbor_vec);
                 pq.push(std::make_pair(priority, neighbor));
                 predecessors[neighbor] = current_pos;
             }
@@ -422,18 +440,18 @@ std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
 
 reconstruct_path:
   std::vector<mesh_map::Vector> path;
-  path.push_back(goal);
+  path.push_back(mesh_map::Vector(goal.x,goal.y,goal.z));
   for (const auto& goal_pos : goal_positions) {
       auto it = predecessors.find(goal_pos);
       if (it != predecessors.end()) {
           auto pos = goal_pos;
           
           while (it != predecessors.end()) {
-              path.push_back(pos);
+              path.push_back(mesh_map::Vector(pos.x,pos.y,pos.z));
               pos = it->second;
               it = predecessors.find(pos);
           }
-          
+        
           break;
       }
   }
@@ -441,7 +459,6 @@ reconstruct_path:
   std::reverse(path.begin(), path.end());
   return path;
 }
-
 
 //   savePathAndNormals(path,"path_data.txt","normal_data.txt");
 
