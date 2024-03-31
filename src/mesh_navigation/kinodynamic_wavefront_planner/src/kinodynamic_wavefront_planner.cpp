@@ -59,8 +59,8 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
   uint32_t outcome = waveFrontPropagation(goal_vec, start_vec, path);
 
-  std::vector<mesh_map::Vector> path_points_2 = findMinimalCostPath(start_vec,
-   goal_vec,
+  std::vector<mesh_map::Vector> path_points_2 = findMinimalCostPath(start,
+   goal,
    [this](const std::vector<double>& from, const std::vector<double>& to) -> float {
         return this->getSteeringAngleCost(from, to);
     });
@@ -114,17 +114,6 @@ float KinodynamicWavefrontPlanner::getSteeringAngleCost(const std::vector<double
     double cost = normalized_value;
 
     return static_cast<float>(cost);
-}
-
-
-struct VectorHash {
-size_t operator()(const mesh_map::Vector& v) const {
-return std::hash<float>()(v.x) ^ std::hash<float>()(v.y) ^ std::hash<float>()(v.z);
-}
-};
-
-bool operator==(const mesh_map::Vector& a, const mesh_map::Vector& b) {
-return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
 
@@ -321,17 +310,68 @@ struct CompareCost {
     }
 };
 
+struct VectorHash {
+size_t operator()(const mesh_map::Vector& v) const {
+return std::hash<float>()(v.x) ^ std::hash<float>()(v.y) ^ std::hash<float>()(v.z);
+}
+};
+
+bool operator==(const mesh_map::Vector& a, const mesh_map::Vector& b) {
+return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+// struct State {
+//     float x, y, z;
+//     float qw, qx, qy, qz; 
+
+//     State(float x, float y, float z, float qw, float qx, float qy, float qz)
+//     : x(x), y(y), z(z), qw(qw), qx(qx), qy(qy), qz(qz) {}
+
+//     bool operator==(const State& other) const {
+//         return x == other.x && y == other.y && z == other.z &&
+//                qw == other.qw && qx == other.qx && qy == other.qy && qz == other.qz;
+//     }
+// };
+
+// struct StateHash {
+//     size_t operator()(const State& s) const {
+//         auto hash_combine = [](size_t lhs, size_t rhs) {
+//             return lhs ^ (rhs + 0x9e3779b9 + (lhs << 6) + (lhs >> 2));
+//         };
+
+//         size_t hash = std::hash<float>()(s.x);
+//         hash = hash_combine(hash, std::hash<float>()(s.y));
+//         hash = hash_combine(hash, std::hash<float>()(s.z));
+//         hash = hash_combine(hash, std::hash<float>()(s.qw));
+//         hash = hash_combine(hash, std::hash<float>()(s.qx));
+//         hash = hash_combine(hash, std::hash<float>()(s.qy));
+//         hash = hash_combine(hash, std::hash<float>()(s.qz));
+//         return hash;
+//     }
+// };
+
+// bool operator==(const State& a, const State& b) {
+//     return a.x == b.x && a.y == b.y && a.z == b.z &&
+//            a.qw == b.qw && a.qx == b.qx && a.qy == b.qy && a.qz == b.qz;
+// }
+
+// struct CompareCost {
+//     bool operator()(const std::pair<float, State>& a, const std::pair<float, State>& b) const {
+//         return a.first > b.first;
+//     }
+// };
+
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
-    const mesh_map::Vector& original_start,
-    const mesh_map::Vector& original_goal,
+    const geometry_msgs::PoseStamped& original_start,
+    const geometry_msgs::PoseStamped& original_goal,
     std::function<double(const std::vector<double>&, const std::vector<double>&)> kino_dynamic_cost_function) {
     
     // Setup and initialization
     const auto& mesh = mesh_map->mesh();
     const auto& vertex_costs = mesh_map->vertexCosts();
 
-    mesh_map::Vector start = original_start;
-    mesh_map::Vector goal = original_goal;
+    mesh_map::Vector start = mesh_map::toVector(original_start.pose.position);
+    mesh_map::Vector goal =  mesh_map::toVector(original_goal.pose.position);
 
     const auto& start_face = mesh_map->getContainingFace(start, 0.4).unwrap();
     const auto& goal_face = mesh_map->getContainingFace(goal, 0.4).unwrap();

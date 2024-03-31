@@ -25,7 +25,7 @@ public:
   virtual uint32_t makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, double& cost, std::string& message) override;
   virtual float getKinodynamicCost(const lvr2::VertexHandle& from, const lvr2::VertexHandle& to);
   virtual std::vector<mesh_map::Vector> getAdjacentPositions(const mesh_map::Vector& vertex,  int pointsPerEdge);
-  virtual std::vector<mesh_map::Vector> findMinimalCostPath(const mesh_map::Vector& original_start, const mesh_map::Vector& original_goal, std::function<double(const std::vector<double>&, const std::vector<double>&)> kino_dynamic_cost_function);
+  virtual std::vector<mesh_map::Vector> findMinimalCostPath(const geometry_msgs::PoseStamped& original_start, const geometry_msgs::PoseStamped& original_goal, std::function<double(const std::vector<double>&, const std::vector<double>&)> kino_dynamic_cost_function);
   virtual nav_msgs::Path getNavPathFromVectors(const std::vector<mesh_map::Vector> &path);
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getSteeringAngleCost(const std::vector<double>& from, const std::vector<double>& to);
