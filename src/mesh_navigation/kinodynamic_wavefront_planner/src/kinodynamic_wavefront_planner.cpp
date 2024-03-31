@@ -61,7 +61,7 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
   std::vector<mesh_map::Vector> path_points_2 = findMinimalCostPath(start_vec,
    goal_vec,
-   [this](const mesh_map::Vector& from, const mesh_map::Vector& to) -> float {
+   [this](const std::vector<double>& from, const std::vector<double>& to) -> float {
         return this->getSteeringAngleCost(from, to);
     });
   nav_msgs::Path min_steering_path = getNavPathFromVectors(path_points_2);
@@ -95,12 +95,10 @@ float KinodynamicWavefrontPlanner::getKinodynamicCost(const lvr2::VertexHandle& 
 
 
 
-float KinodynamicWavefrontPlanner::getSteeringAngleCost(const mesh_map::Vector& from, const mesh_map::Vector& to) {
-    const auto& mesh = mesh_map->mesh();
-    auto p_from = from;
-    auto p_to = to;
-    std::vector<double> current_state = {p_from.x, p_from.y, atan2(p_from.y, p_from.x)};
-    std::vector<double> next_state = {p_to.x, p_to.y, atan2(p_to.y, p_to.x)};
+float KinodynamicWavefrontPlanner::getSteeringAngleCost(const std::vector<double>& from, const std::vector<double>& to) {
+   
+    std::vector<double> current_state = from;
+    std::vector<double> next_state = to;
 
     const double min_angle = -M_PI / 3; // Example: -30 degrees
     const double max_angle = M_PI / 3;  // Example: 30 degrees
@@ -326,7 +324,7 @@ struct CompareCost {
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
     const mesh_map::Vector& original_start,
     const mesh_map::Vector& original_goal,
-    std::function<double(const mesh_map::Vector&, const mesh_map::Vector&)> kino_dynamic_cost_function) {
+    std::function<double(const std::vector<double>&, const std::vector<double>&)> kino_dynamic_cost_function) {
     
     // Setup and initialization
     const auto& mesh = mesh_map->mesh();
@@ -370,8 +368,9 @@ std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::findMinimalCostPath(
         std::vector<mesh_map::Vector> neighbors = getAdjacentPositions(current_pos, 20);
         for (const auto& neighbor : neighbors) {
             if (visited[neighbor]) continue;
-
-            float new_cost = cost_so_far[current_pos] + kino_dynamic_cost_function(current_pos, neighbor);
+            std::vector<double> current_state = {current_pos.x, current_pos.y, atan2(current_pos.y, current_pos.x)};
+            std::vector<double> next_state = {neighbor.x, neighbor.y, atan2(neighbor.y, neighbor.x)};
+            float new_cost = cost_so_far[current_pos] + kino_dynamic_cost_function(current_state, next_state);
             if (cost_so_far.find(neighbor) == cost_so_far.end() || new_cost < cost_so_far[neighbor]) {
                 cost_so_far[neighbor] = new_cost;
                 float priority = new_cost + vectorFieldCost(neighbor); 
