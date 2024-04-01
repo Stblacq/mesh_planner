@@ -64,20 +64,23 @@ public:
   };
 
   virtual uint32_t makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal, double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, double& cost, std::string& message) override;
-  virtual std::vector<mesh_map::Vector> getAdjacentPositions(const mesh_map::Vector& vertex,  int pointsPerEdge);
-  virtual std::vector<mesh_map::Vector> findMinimalCostPath(const geometry_msgs::PoseStamped& original_start, const geometry_msgs::PoseStamped& original_goal, std::function<double(const State&, const State&)> kino_dynamic_cost_function);
-  virtual nav_msgs::Path getNavPathFromVectors(const std::vector<mesh_map::Vector> &path);
+  virtual std::vector<std::pair<mesh_map::Vector, float>> getAdjacentPositions(const mesh_map::Vector& vertex,  int pointsPerEdge);
+  virtual std::vector<State> findMinimalCostPath(const geometry_msgs::PoseStamped& original_start, const geometry_msgs::PoseStamped& original_goal, std::function<double(const State&, const State&)> kino_dynamic_cost_function);
+  virtual nav_msgs::Path getNavPathFromStates(const std::vector<State> &path);
   virtual double calculateSteeringAngle(const std::vector<double>& current_state, const std::vector<double>& next_state, double L, double dt);
   virtual float getKinodynamicCost(const State& from, const State& to);
   virtual nav_msgs::Path getCvpPath(std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>>& path, const mesh_map::Vector& goal_vec, double& cost);
   virtual float calculateCostAtPosition(const mesh_map::Vector& position); 
-  virtual float vectorFieldCost(const mesh_map::Vector& position); 
-  virtual nav_msgs::Path getBsplinePath(const std::vector<mesh_map::Vector>& path);
+  virtual std::pair<float, float> vectorFieldCost(); 
+  virtual nav_msgs::Path getBsplinePath(const std::vector<State>& path);
   virtual Eigen::Vector3d getPosition(const lvr2::VertexHandle& vertex_handle);
   virtual void  savePathAndNormals(const std::vector<mesh_map::Vector>& path, const std::string& pathFileName, const std::string& normalsFileName);
   virtual State getStateAtPosition(const mesh_map::Vector position);
   virtual State getStateAtPose(const mesh_map::Vector position, const geometry_msgs::Pose pose);
   virtual double getHeadingFromState(const State& state);
+  virtual State poseToState(const geometry_msgs::Pose& pose);
+  virtual float evaluatePathFeasibility(const nav_msgs::Path& path);
+  virtual float evaluateTransition(const State& from, const State& to);
 
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
