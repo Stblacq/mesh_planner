@@ -45,50 +45,49 @@ KinodynamicWavefrontPlanner::~KinodynamicWavefrontPlanner()
 // }
 
 
-uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
-                                    double tolerance, std::vector<geometry_msgs::PoseStamped>& plan, double& cost,
-                                    std::string& message)
+uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped& start, 
+                                               const geometry_msgs::PoseStamped& goal,
+                                               double tolerance, 
+                                               std::vector<geometry_msgs::PoseStamped>& plan, 
+                                               double& cost,
+                                               std::string& message)
 {
-  const auto& mesh = mesh_map->mesh();
-  std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>> path;
+    ROS_INFO("Starting wave front propagation.");
+    const auto& mesh = mesh_map->mesh();
+    std::list<std::pair<mesh_map::Vector, lvr2::FaceHandle>> path;
 
-  // mesh_map->combineVertexCosts(); // TODO should be outside the planner
+    mesh_map::Vector goal_vec = mesh_map::toVector(goal.pose.position);
+    mesh_map::Vector start_vec = mesh_map::toVector(start.pose.position);
 
-  ROS_INFO("start wave front propagation.");
+    uint32_t outcome = waveFrontPropagation(goal_vec, start_vec, path);
 
-  mesh_map::Vector goal_vec = mesh_map::toVector(goal.pose.position);
-  mesh_map::Vector start_vec = mesh_map::toVector(start.pose.position);
+    std::vector<mesh_map::Vector> path_points = findMinimalCostPath(start, goal, 
+        [this](const State& from, const State& to) -> float {
+            return this->getKinodynamicCost(from, to);
+        });
 
-  uint32_t outcome = waveFrontPropagation(goal_vec, start_vec, path);
+    nav_msgs::Path min_steering_path = getNavPathFromVectors(path_points);
+    nav_msgs::Path bsp_path = getBsplinePath(path_points);
+    nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
 
-  std::vector<mesh_map::Vector> path_points_2 = findMinimalCostPath(start,
-   goal,
-   [this](const State& from, const State& to) -> float {
-        return this->getKinodynamicCost(from, to);
-    });
-  nav_msgs::Path min_steering_path = getNavPathFromVectors(path_points_2);
+    if (!min_steering_path.poses.empty()) min_steering_path.poses[0] = start;
+    if (!bsp_path.poses.empty()) bsp_path.poses[0] = start;
+    if (!cvp_path.poses.empty()) cvp_path.poses[0] = start;
 
-  nav_msgs::Path bsp_path = getBsplinePath(path_points_2);
+    path_pub.publish(min_steering_path);
+    path_pub1.publish(bsp_path);
+    path_pub2.publish(cvp_path);
 
-  path_pub.publish(min_steering_path);
-  
-  nav_msgs::Path cvp_path = getCvpPath(path, goal_vec, cost);
+    plan = min_steering_path.poses;
+    ROS_INFO_STREAM("Path length: " << cost << " meters");
 
-  plan = min_steering_path.poses;
-//   path_pub1.publish(min_steering_path);
-  
-  path_pub2.publish(cvp_path);
+    mesh_map->publishVertexCosts(potential, "Potential");
+    if (publish_vector_field)
+    {
+        mesh_map->publishVectorField("vector_field", vector_map, publish_face_vectors);
+    }
 
-  
-  mesh_map->publishVertexCosts(potential, "Potential");
-  ROS_INFO_STREAM("Path length: " << cost << "m");
-
-  if (publish_vector_field)
-  {
-    mesh_map->publishVectorField("vector_field", vector_map, publish_face_vectors);
-  }
-
-  return outcome;
+    return outcome;
 }
 
 double KinodynamicWavefrontPlanner::getHeadingFromState(const State& state) {
