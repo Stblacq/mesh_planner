@@ -96,7 +96,7 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
     path_pub1.publish(bsp_path);
     path_pub2.publish(cvp_path);
 
-    plan = bsp_path.poses;
+    plan = min_steering_path.poses;
     ROS_INFO_STREAM("Path length: " << cost << " meters");
     ROS_INFO_STREAM("Max  (CVP): " << evaluatePathFeasibility(cvp_path) << "");
     ROS_INFO_STREAM("Max (KWFP): " << evaluatePathFeasibility(min_steering_path) << "");
@@ -161,8 +161,22 @@ KinodynamicWavefrontPlanner::State KinodynamicWavefrontPlanner::getStateAtPositi
 
 
 KinodynamicWavefrontPlanner::State KinodynamicWavefrontPlanner::getStateAtPose(const mesh_map::Vector position, const geometry_msgs::Pose pose) {
-    return State(position.x, position.y, position.z, pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+    // Calculate the norm of the quaternion
+    double norm = std::sqrt(pose.orientation.w * pose.orientation.w +
+                            pose.orientation.x * pose.orientation.x +
+                            pose.orientation.y * pose.orientation.y +
+                            pose.orientation.z * pose.orientation.z);
+    
+    // Normalize the quaternion components if the norm is not zero
+    double w = pose.orientation.w / norm;
+    double x = pose.orientation.x / norm;
+    double y = pose.orientation.y / norm;
+    double z = pose.orientation.z / norm;
+    
+    // Construct and return the State with the normalized orientation
+    return State(position.x, position.y, position.z, w, x, y, z);
 }
+
 
 
 std::vector<std::pair<mesh_map::Vector, float>> KinodynamicWavefrontPlanner::getAdjacentPositions(const mesh_map::Vector& position, int pointsPerEdge)
@@ -468,7 +482,7 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
             if (visited[neighbor] || (kd_cost>2) ) continue;
 
             
-            float new_cost = cost_so_far[current_pos] + kd_cost;
+            float new_cost = cost_so_far[current_pos] + (5*kd_cost);
 
             if (cost_so_far.find(neighbor) == cost_so_far.end() || new_cost < cost_so_far[neighbor]) {
                 cost_so_far[neighbor] = new_cost;
