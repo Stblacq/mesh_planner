@@ -81,7 +81,9 @@ public:
   virtual State poseToState(const geometry_msgs::Pose& pose);
   virtual float evaluatePathFeasibility(const nav_msgs::Path& path);
   virtual float evaluateTransition(const State& from, const State& to);
-
+  virtual boost::optional<mesh_map::Vector>  calculateDirectionAtPosition(const mesh_map::Vector& position);
+  virtual std::vector<mesh_map::Vector> getAdjacentDirections(const mesh_map::Vector& position, int samples);
+  
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner
    */
