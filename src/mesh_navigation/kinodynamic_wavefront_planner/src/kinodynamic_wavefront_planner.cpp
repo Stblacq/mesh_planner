@@ -596,26 +596,14 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
             mesh_map::Vector diff = next - ideal_next;
             float direction_cost = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
 
-                        // float direction_cost = 1;
+            // State neighbor = getStateAtPosition(neighbor_vec);
+            geometry_msgs::Pose next_pose = mesh_map::calculatePoseFromPosition(current_vector, neighbor_vec, face_normals[current_face]);
 
-            // direction_cost = mesh_dir.dot(neighbor_dir);
-            // direction_cost = (direction_cost + 1.0f) / 2.0f;
-            // ROS_INFO_STREAM("Neighbour dir: " << neighbor_dir.is_initialized());
+            State neighbor =  getStateAtPose(neighbor_vec, next_pose);
 
+            float kd_cost = (5*direction_cost) + kino_dynamic_cost_function(current_pos, neighbor);
 
-            // float vector_field_cost = calculateCostAtPosition(neighbor_vec);
-            // vector_field_cost = (min_max_cost.first != min_max_cost.second) ? (neighbor_pair.second - min_max_cost.first) / (min_max_cost.second - min_max_cost.first) : 0.5;
-
-            
-            // geometry_msgs::Pose next_pose = mesh_map::calculatePoseFromPosition(current_vector, neighbor_vec, face_normals[current_face]);
-
-
-            // State neighbor =  getStateAtPose(neighbor_vec, next_pose);
-            State neighbor = getStateAtPosition(neighbor_vec);
-
-            float kd_cost = direction_cost; //+ kino_dynamic_cost_function(current_pos, neighbor) + vector_field_cost ;
-
-            if (visited[neighbor] ||  std::isinf(kd_cost)) continue;
+            if (visited[neighbor] || std::isinf(kd_cost)) continue;
 
             
             float new_cost = cost_so_far[current_pos] + kd_cost;
