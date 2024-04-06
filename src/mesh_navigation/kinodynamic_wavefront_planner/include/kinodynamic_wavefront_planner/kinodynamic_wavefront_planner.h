@@ -25,6 +25,9 @@ public:
   struct State {
       float x, y, z;
       float qw, qx, qy, qz;
+      mesh_map::Normal faceNormal;
+      float vx, vy, vz;
+
 
       // Default constructor
       State() : x(0), y(0), z(0), qw(0), qx(0), qy(0), qz(0) {}

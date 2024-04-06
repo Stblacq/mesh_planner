@@ -110,15 +110,6 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
 
     return outcome;
 }
-
-double KinodynamicWavefrontPlanner::getHeadingFromState(const State& state) {
-    double siny_cosp = 2.0 * (state.qw * state.qz + state.qx * state.qy);
-    double cosy_cosp = 1.0 - 2.0 * (state.qy * state.qy + state.qz * state.qz);
-    double yaw = std::atan2(siny_cosp, cosy_cosp);
-
-    return yaw; 
-}
-
 float KinodynamicWavefrontPlanner::evaluateTransition(const State& from, const State& to) {
    
     std::vector<double> current_state = {from.x, from.y, getHeadingFromState(from)};
@@ -129,6 +120,16 @@ float KinodynamicWavefrontPlanner::evaluateTransition(const State& from, const S
 
     return static_cast<float>(steering_angle);
 }
+
+double KinodynamicWavefrontPlanner::getHeadingFromState(const State& state) {
+    double siny_cosp = 2.0 * (state.qw * state.qz + state.qx * state.qy);
+    double cosy_cosp = 1.0 - 2.0 * (state.qy * state.qy + state.qz * state.qz);
+    double yaw = std::atan2(siny_cosp, cosy_cosp);
+
+    return yaw; 
+}
+
+
 
 float KinodynamicWavefrontPlanner::getKinodynamicCost(const State& from, const State& to) {
    
@@ -292,7 +293,7 @@ float KinodynamicWavefrontPlanner::calculateCostAtPosition(const mesh_map::Vecto
 
     const auto& vertex_handles = mesh.getVerticesOfFace(goal_face);
 
-    // Compute barycentric coordinates and direction
+    // Compute barycentric coordinates
     std::array<float, 3> barycentric_coords;
     float dist;
     mesh_map->projectedBarycentricCoords(goal, goal_face, barycentric_coords, dist);
@@ -311,7 +312,7 @@ boost::optional<mesh_map::Vector>  KinodynamicWavefrontPlanner::calculateDirecti
 
     const auto& vertex_handles = mesh.getVerticesOfFace(goal_face);
 
-    // Compute barycentric coordinates and direction
+    // Compute barycentric coordinates
     std::array<float, 3> barycentric_coords;
     float dist;
     mesh_map->projectedBarycentricCoords(goal, goal_face, barycentric_coords, dist);
@@ -422,71 +423,7 @@ int iterations = 5, double neighbor_weight = 0.1) {
     return smoothed_path;
 }
 
-// def find_optimal_path(start_point, end_point, OptimalDirection, IsPathPossible):
-//     current_point = start_point
-//     path = [start_point]
-    
-//     while not is_close_enough(current_point, end_point):
-//         direction, direction = OptimalDirection(current_point)
-        
-//         # Calculate the next point based on direction and direction
-//         next_point = calculate_next_point(current_point, direction, direction)
-        
-//         # Ensure the next point is within the mesh and the path is possible
-//         if not IsPathPossible(current_point, next_point):
-//             # Handle the case where the direct path is not possible.
-//             # This might involve finding a different direction that is allowed,
-//             # or breaking down the move into smaller steps and checking each.
-//             next_point = find_alternative_path(current_point, next_point, OptimalDirection, IsPathPossible)
-        
-//         # Update the current point and add the new point to the path
-//         current_point = next_point
-//         path.append(current_point)
-    
-//     return path
 
-// std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::findMinimalCostPath(
-//     const geometry_msgs::PoseStamped& original_start,
-//     const geometry_msgs::PoseStamped& original_goal,
-//     std::function<double(const State&, const State&)> kino_dynamic_cost_function) {
-
-//         geometry_msgs::Point start_point = original_start.pose.position;
-//         mesh_map::Vector start_vector = mesh_map::toVector(start_point);
-
-//         State start =  getStateAtPose(start_vector,original_start.pose);
-//         State current_state = start;
-//         mesh_map::Vector current_vector = start_vector;
-//         const lvr2::FaceHandle& goal_face = mesh_map->getContainingFace(goal_vector, 0.4).unwrap();
-//         const lvr2::FaceHandle& current_face = mesh_map->getContainingFace(current_vector, 0.4).unwrap();
-//         std::vector<State> path;
-//         path.push_back(start);
-
-//         while(current_face != goal_face) {
-//             boost::optional<mesh_map::Vector> mesh_dir_opt  = calculateDirectionAtPosition(current_vector);
-//             if (mesh_dir_opt.is_initialized())
-//             {
-//                 mesh_map::Normal mesh_dir = mesh_dir_opt.get().normalized();
-//                 mesh_map::Vector next_vector = current_vector + mesh_dir*0.5;
-//                 State next_state = getStateAtPosition(next_vector);
-
-//                 if( std::isinf(kino_dynamic_cost_function(current_state, next_state))){
-//                     path.push_back(next_state);
-//                 }else{
-//                     //Explore Alternatives
-//                     std::vector<std::pair<mesh_map::Vector, float>> neighbors_map = getAdjacentPositions(current_vector, 8);
-//                     for (const std::pair<mesh_map::Vector, float> neighbor_pair : neighbors_map) {
-//                         mesh_map::Vector neighbor_vec = neighbor_pair.first;
-
-//                     }
-
-//                 }
-
-
-//             }
-            
-//         }
-
-//     }
 std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::getAdjacentDirections(const mesh_map::Vector& position_, int samples) {
         mesh_map::Vector position = position_;
         const auto& mesh = mesh_map->mesh();
@@ -570,13 +507,15 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
 
         const lvr2::FaceHandle& current_face = mesh_map->getContainingFace(current_vector, 0.4).unwrap();
 
+        current_pos.faceNormal = face_normals[current_face];
+
         if (current_face == goal_face) {
             last=current_pos;
             goto reconstruct_path; 
         }
 
 
-        std::vector<std::pair<mesh_map::Vector, float>> neighbors_map = getAdjacentPositions(current_vector, 20);
+        std::vector<std::pair<mesh_map::Vector, float>> neighbors_map = getAdjacentPositions(current_vector, 3);
         
         for (const std::pair<mesh_map::Vector, float> neighbor_pair : neighbors_map) {
 
@@ -595,13 +534,17 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
             mesh_map::Vector next = current_vector + neighbor_dir;
             mesh_map::Vector diff = next - ideal_next;
             float direction_cost = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
+            direction_cost = direction_cost / 2.0f;
 
             // State neighbor = getStateAtPosition(neighbor_vec);
             geometry_msgs::Pose next_pose = mesh_map::calculatePoseFromPosition(current_vector, neighbor_vec, face_normals[current_face]);
+            const lvr2::FaceHandle& neighbor_face = mesh_map->getContainingFace(neighbor_vec, 0.4).unwrap();
 
             State neighbor =  getStateAtPose(neighbor_vec, next_pose);
+            neighbor.faceNormal = face_normals[neighbor_face];
 
-            float kd_cost = (5*direction_cost) + kino_dynamic_cost_function(current_pos, neighbor);
+
+            float kd_cost = direction_cost + kino_dynamic_cost_function(current_pos, neighbor);
 
             if (visited[neighbor] || std::isinf(kd_cost)) continue;
 
