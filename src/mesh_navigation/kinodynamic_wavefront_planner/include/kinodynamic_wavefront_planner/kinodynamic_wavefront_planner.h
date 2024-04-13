@@ -86,6 +86,7 @@ public:
   virtual float evaluateTransition(const State& from, const State& to);
   virtual boost::optional<mesh_map::Vector>  calculateDirectionAtPosition(const mesh_map::Vector& position);
   virtual std::vector<mesh_map::Vector> getAdjacentDirections(const mesh_map::Vector& position, int samples);
+  virtual std::vector<mesh_map::Vector> pathToVectorPath(nav_msgs::Path  path);
   
   /**
    * @brief Dynamic reconfigure callback specific to KinodynamicWavefrontPlanner

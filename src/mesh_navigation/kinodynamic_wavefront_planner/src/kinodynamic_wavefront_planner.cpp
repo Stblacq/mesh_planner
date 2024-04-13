@@ -96,7 +96,13 @@ uint32_t KinodynamicWavefrontPlanner::makePlan(const geometry_msgs::PoseStamped&
     path_pub1.publish(bsp_path);
     path_pub2.publish(cvp_path);
 
-    plan = min_steering_path.poses;
+
+    savePathAndNormals(pathToVectorPath(cvp_path),"cvp_path.txt","cvp_path_normal.txt");
+    savePathAndNormals(pathToVectorPath(bsp_path),"bsp_path.txt","bsp_path_normal.txt");
+    savePathAndNormals(pathToVectorPath(min_steering_path),"mkd_path.txt","mkd_path_normal.txt");
+
+
+    plan = cvp_path.poses;
     ROS_INFO_STREAM("Path length: " << cost << " meters");
     ROS_INFO_STREAM("Max  (CVP): " << evaluatePathFeasibility(cvp_path) << "");
     ROS_INFO_STREAM("Max (KWFP): " << evaluatePathFeasibility(min_steering_path) << "");
@@ -358,6 +364,17 @@ void saveVectorToFile(const std::vector<Eigen::Vector3d>& vec, const std::string
     outFile.close();
 }
 
+std::vector<mesh_map::Vector> KinodynamicWavefrontPlanner::pathToVectorPath(nav_msgs::Path  path){
+
+    std::vector<mesh_map::Vector> path_;
+    for (auto pose_stamped :path.poses)
+    {
+        auto position = pose_stamped.pose.position;
+        path_.push_back(mesh_map::Vector(position.x, position.y, position.z));
+    }
+return path_;
+}
+ 
 
 void  KinodynamicWavefrontPlanner::savePathAndNormals(const std::vector<mesh_map::Vector>& path,
   const std::string& pathFileName,
@@ -492,7 +509,10 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
     std::unordered_map<State, bool, StateHash> visited;
 
     std::unordered_map<State, State, StateHash> predecessors;
-    State last;
+    std::optional<State> last;
+    const int w1 = 1;
+    const int w2 = 0;
+
 
     while (!pq.empty()) {
         auto current = pq.top();
@@ -515,7 +535,7 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
         }
 
 
-        std::vector<std::pair<mesh_map::Vector, float>> neighbors_map = getAdjacentPositions(current_vector, 3);
+        std::vector<std::pair<mesh_map::Vector, float>> neighbors_map = getAdjacentPositions(current_vector, 4);
         
         for (const std::pair<mesh_map::Vector, float> neighbor_pair : neighbors_map) {
 
@@ -543,13 +563,14 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
             State neighbor =  getStateAtPose(neighbor_vec, next_pose);
             neighbor.faceNormal = face_normals[neighbor_face];
 
-
-            float kd_cost = direction_cost + kino_dynamic_cost_function(current_pos, neighbor);
+            float kd_cost = kino_dynamic_cost_function(current_pos,neighbor);
 
             if (visited[neighbor] || std::isinf(kd_cost)) continue;
+            float cost_to_go = w1*direction_cost + w2*kd_cost;
+
 
             
-            float new_cost = cost_so_far[current_pos] + kd_cost;
+            float new_cost = cost_so_far[current_pos] + cost_to_go;
 
             if (cost_so_far.find(neighbor) == cost_so_far.end() || new_cost < cost_so_far[neighbor]) {
                 cost_so_far[neighbor] = new_cost;
@@ -560,11 +581,16 @@ std::vector<KinodynamicWavefrontPlanner::State> KinodynamicWavefrontPlanner::fin
         }
     }
 
+    if (!last.has_value()) {
+      ROS_INFO_STREAM("No Feasible Path");
+     return std::vector<State>(); 
+    }
+
 reconstruct_path:
     std::vector<State> path;
     path.push_back(goal);
-    auto it = predecessors.find(last);
-    auto pos = last;
+    auto it = predecessors.find(last.value());
+    auto pos = last.value();
 
     while (it != predecessors.end()) {
         path.push_back(pos);
