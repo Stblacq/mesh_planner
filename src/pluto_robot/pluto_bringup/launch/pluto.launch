@@ -9,7 +9,7 @@
   <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" output="screen"/>
 
   <!-- Launch Volksbot driver -->
-  <node name="volksbot" pkg="volksbot_driver" type="volksbot" respawn="false" output="screen">
+  <node name="volksbot" pkg="volksbot_driver" type="volksbot" respawn="true" output="screen">
       <remap from="joint_states" to="volksbot_joint_states" />
       <param name="wheel_radius" type="double" value="0.103" />
       <param name="axis_length" type="double" value="0.55" />

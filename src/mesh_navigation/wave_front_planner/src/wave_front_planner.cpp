@@ -37,6 +37,9 @@
 
 #include <lvr2/geometry/Handles.hpp>
 #include <lvr2/util/Meap.hpp>
+#include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <geometry_msgs/Twist.h>
 
 #include <mbf_msgs/GetPathResult.h>
 #include <mesh_map/util.h>
@@ -145,6 +148,10 @@ bool WaveFrontPlanner::initialize(const std::string& plugin_name,
   path_pub1 = private_nh.advertise<nav_msgs::Path>("path1", 1, true);
   path_pub2 = private_nh.advertise<nav_msgs::Path>("path2", 1, true);
   path_pub3 = private_nh.advertise<nav_msgs::Path>("path3", 1, true);
+  realtime_path_pub = private_nh.advertise<geometry_msgs::PointStamped>("/realtime_path", 10);
+
+  odom_sub = private_nh.subscribe("/robot_pose_ekf/odom_combined", 10, &WaveFrontPlanner::odom_callback, this);
+  cmd_vel_pub = private_nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
 
   const auto& mesh = mesh_map->mesh();
   direction = lvr2::DenseVertexMap<float>(mesh.nextVertexIndex(), 0);
@@ -157,6 +164,11 @@ bool WaveFrontPlanner::initialize(const std::string& plugin_name,
   reconfigure_server_ptr->setCallback(config_callback);
 
   return true;
+}
+
+
+void WaveFrontPlanner::odom_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg) {
+    current_state = msg->pose.pose;
 }
 
 void WaveFrontPlanner::reconfigureCallback(wave_front_planner::WaveFrontPlannerConfig& cfg, uint32_t level)

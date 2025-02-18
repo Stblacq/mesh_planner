@@ -160,8 +160,8 @@ uint32_t MeshController::computeVelocityCommands(const geometry_msgs::PoseStampe
   float cost = map_ptr->costAtPosition(handles, bary_coords);
   const mesh_map::Normal& mesh_normal = poseToDirectionVector(pose, tf2::Vector3(0,0,1));
   std::array<float, 2> velocities = naiveControl(robot_pos, robot_dir, mesh_dir, mesh_normal, cost);
-  cmd_vel.twist.linear.x = std::min(config.max_lin_velocity, velocities[0] * config.lin_vel_factor);
-  cmd_vel.twist.angular.z = std::min(config.max_ang_velocity, velocities[1] * config.ang_vel_factor);
+  cmd_vel.twist.linear.x =0 ; //std::min(config.max_lin_velocity, velocities[0] * config.lin_vel_factor);
+  cmd_vel.twist.angular.z =0; //std::min(config.max_ang_velocity, velocities[1] * config.ang_vel_factor);
   cmd_vel.header.stamp = ros::Time::now();
 
   if (cancel_requested)

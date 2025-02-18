@@ -155,7 +155,7 @@ class Planning(smach.StateMachine):
         goal.use_start_pose = False
         goal.tolerance = 0.2  # 20cm tolerance to the target
         goal.target_pose = user_data.target_pose
-        goal.planner = 'kinodynamic_wavefront_planner'  
+        goal.planner = 'gakd_mesh_planner'  
 
     @staticmethod
     @smach.cb_interface(

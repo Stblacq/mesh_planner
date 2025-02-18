@@ -43,6 +43,8 @@
 #include <mesh_map/mesh_map.h>
 #include <wave_front_planner/WaveFrontPlannerConfig.h>
 #include <nav_msgs/Path.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
+
 
 namespace wave_front_planner
 {
@@ -174,6 +176,14 @@ protected:
   ros::Publisher path_pub1;
   ros::Publisher path_pub2;
   ros::Publisher path_pub3;
+  ros::Publisher realtime_path_pub;
+
+  ros::Subscriber odom_sub;
+  ros::Publisher cmd_vel_pub;
+  geometry_msgs::Pose current_state;
+
+  void odom_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg);
+
 
   //! whether to publish the vector field or not
   bool publish_vector_field;
