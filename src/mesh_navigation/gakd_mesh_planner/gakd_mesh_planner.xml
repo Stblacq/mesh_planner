@@ -1,0 +1,8 @@
+<library path="lib/libgakd_mesh_planner">
+    <class name="gakd_mesh_planner/GakdMeshPlanner" type="gakd_mesh_planner::GakdMeshPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            A GA mesh planner for mbf_mesh_nav
+        </description>
+    </class>
+</library>

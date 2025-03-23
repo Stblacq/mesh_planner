@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <include file="$(find pluto_gazebo)/launch/pluto_gazebo.launch">
+    <arg name="world_name" value="$(find pluto_gazebo)/worlds/innopolis.world"/>
+    <arg name="x" value="-0.009227"/>
+    <arg name="y" value="0.009736"/>
+    <arg name="z" value="-0.611976"/>
+     <arg name="roll" default="0.0"/>
+    <arg name="pitch" default="0.0"/>
+    <arg name="yaw" default="0.0"/>
+  </include>
+</launch>
