@@ -1,0 +1,8 @@
+<library path="gakd_mesh_planner">
+    <class name="gakd_mesh_planner/GAKDMeshPlanner" type="gakd_mesh_planner::GAKDMeshPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            The Continuous Vector Field Planner (GAKD) for mbf_mesh_nav
+        </description>
+    </class>
+</library>

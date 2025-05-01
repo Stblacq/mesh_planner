@@ -1,0 +1,118 @@
+/*
+ *  Copyright 2018, Sebastian Pütz
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that the following conditions
+ *  are met:
+ *
+ *  1. Redistributions of source code must retain the above copyright
+ *     notice, this list of conditions and the following disclaimer.
+ *
+ *  2. Redistributions in binary form must reproduce the above
+ *     copyright notice, this list of conditions and the following
+ *     disclaimer in the documentation and/or other materials provided
+ *     with the distribution.
+ *
+ *  3. Neither the name of the copyright holder nor the names of its
+ *     contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
+ *
+ *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ *  POSSIBILITY OF SUCH DAMAGE.
+ *
+ *  robot_information.cpp
+ *
+ *  author: Sebastian Pütz <spuetz@uni-osnabrueck.de>
+ *
+ */
+
+#include "mbf_utility/robot_information.h"
+#include "mbf_utility/navigation_utility.h"
+
+#include <rclcpp/rclcpp.hpp>
+
+namespace mbf_utility
+{
+RobotInformation::RobotInformation(const rclcpp::Node::SharedPtr& node,
+                                   const TFPtr &tf_buffer,
+                                   const std::string &global_frame,
+                                   const std::string &robot_frame,
+                                   const rclcpp::Duration &tf_timeout,
+                                   const std::string &odom_topic)
+ : node_(node), tf_buffer_(tf_buffer), global_frame_(global_frame), robot_frame_(robot_frame), tf_timeout_(tf_timeout),
+   odom_helper_(node_, odom_topic)
+{
+
+}
+
+
+bool RobotInformation::getRobotPose(geometry_msgs::msg::PoseStamped &robot_pose_globalFrame) const
+{
+  const auto t_now = node_->now();
+
+  std::string err_string;
+  if (!tf_buffer_->canTransform(robot_frame_, global_frame_, t_now, tf_timeout_, &err_string))
+  {
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "Failed to get robot pose. Reason: " << err_string);
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped robot_pose_robotFrame; // default constructed pose at origin
+  robot_pose_robotFrame.header.stamp = t_now;
+  robot_pose_robotFrame.header.frame_id = robot_frame_;
+  tf_buffer_->transform(robot_pose_robotFrame, robot_pose_globalFrame, global_frame_);
+  return true;
+}
+
+bool RobotInformation::getRobotVelocity(geometry_msgs::msg::TwistStamped &robot_velocity) const
+{
+  if (odom_helper_.getOdomTopic().empty())
+  {
+    RCLCPP_DEBUG_THROTTLE(node_->get_logger(), *(node_->get_clock()), 2000, "Odometry topic set as empty; ignoring retrieve velocity requests");
+    return true;
+  }
+
+  nav_msgs::msg::Odometry base_odom;
+  odom_helper_.getOdom(base_odom);
+  if (base_odom.header.stamp == rclcpp::Time(0, 0, node_->get_clock()->get_clock_type()))
+  {
+    RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *(node_->get_clock()), 2000,
+                                "No messages received on topic " << odom_helper_.getOdomTopic() << "; robot velocity unknown");
+    RCLCPP_WARN_STREAM_THROTTLE(node_->get_logger(), *(node_->get_clock()), 2000,
+                                "You can disable these warnings by setting parameter 'odom_topic' as empty");
+    return false;
+  }
+  robot_velocity.header.stamp = base_odom.header.stamp;
+  robot_velocity.header.frame_id = base_odom.child_frame_id;
+  robot_velocity.twist = base_odom.twist.twist;
+  return true;
+}
+
+bool RobotInformation::isRobotStopped(double rot_stopped_velocity, double trans_stopped_velocity) const
+{
+  nav_msgs::msg::Odometry base_odom;
+  odom_helper_.getOdom(base_odom);
+  return fabs(base_odom.twist.twist.angular.z) <= rot_stopped_velocity &&
+         fabs(base_odom.twist.twist.linear.x) <= trans_stopped_velocity &&
+         fabs(base_odom.twist.twist.linear.y) <= trans_stopped_velocity;
+}
+
+const std::string& RobotInformation::getGlobalFrame() const {return global_frame_;};
+
+const std::string& RobotInformation::getRobotFrame() const {return robot_frame_;};
+
+const TF& RobotInformation::getTransformListener() const {return *tf_buffer_;};
+
+const rclcpp::Duration& RobotInformation::getTfTimeout() const {return tf_timeout_;}
+
+} /* namespace mbf_utility */
