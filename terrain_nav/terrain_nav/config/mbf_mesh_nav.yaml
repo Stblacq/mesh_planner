@@ -13,7 +13,7 @@ move_base_flex:
       type: 'gakd_mesh_planner/GAKDMeshPlanner'
       cost_limit: 0.8
       publish_vector_field: true
-    planner_patience: 10.0
+    planner_patience: 200.0
     planner_max_retries: 2
     project_path_onto_mesh: false
 
