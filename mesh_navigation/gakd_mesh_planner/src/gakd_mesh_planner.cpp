@@ -7,6 +7,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "gakd_mesh_planner/gakd_mesh_planner.h"
+#include "geometry_msgs/msg/twist_stamped.hpp"
+
 
 PLUGINLIB_EXPORT_CLASS(gakd_mesh_planner::GAKDMeshPlanner, mbf_mesh_core::MeshPlanner);
 
@@ -210,56 +212,64 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
   double time_horizon, const mesh_map::MeshMap::Ptr& mesh_map,
   rclcpp::Node::SharedPtr node, std::atomic_bool& cancel_planning)
 {
-// Initialize publisher for x_current visualization
-auto point_pub = node->create_publisher<geometry_msgs::msg::PointStamped>("~/current_point", rclcpp::QoS(10));
+    // Initialize publisher for x_current visualization
+    auto point_pub = node->create_publisher<geometry_msgs::msg::PointStamped>("~/current_point", rclcpp::QoS(10));
+    auto twist_pub = node->create_publisher<geometry_msgs::msg::TwistStamped>("~/cmd_vel", rclcpp::QoS(10));
 
-double dt = 0.1;
-int max_steps = 1000;
-double goal_threshold = 0.3;
-Trajectory trajectory;
-State x_current = start_point;
-trajectory.push_back(x_current);
+    double dt = 0.1;
+    int max_steps = 1000;
+    double goal_threshold = 0.3;
+    Trajectory trajectory;
+    State x_current = start_point;
+    trajectory.push_back(x_current);
 
-// Prepare header for PointStamped messages
-std_msgs::msg::Header header;
-header.frame_id = mesh_map->mapFrame();
+    // Prepare header for PointStamped messages
+    std_msgs::msg::Header header;
+    header.frame_id = mesh_map->mapFrame();
 
-for (int step = 0; step < max_steps && !cancel_planning; ++step)
-{
-// Publish x_current as a PointStamped message
-geometry_msgs::msg::PointStamped point_msg;
-point_msg.header = header;
-point_msg.header.stamp = node->now();
-point_msg.point.x = x_current[0];
-point_msg.point.y = x_current[1];
-point_msg.point.z = x_current[2];
-point_pub->publish(point_msg);
+    for (int step = 0; step < max_steps && !cancel_planning; ++step)
+    {
+    // Publish x_current as a PointStamped message
+    geometry_msgs::msg::PointStamped point_msg;
+    point_msg.header = header;
+    point_msg.header.stamp = node->now();
+    point_msg.point.x = x_current[0];
+    point_msg.point.y = x_current[1];
+    point_msg.point.z = x_current[2];
+    point_pub->publish(point_msg);
 
-// Run genetic algorithm to get optimal control
-ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50,
-                                   time_horizon, 0.01, mesh_map);
-x_current = dynamics(x_current, optimal_control[0], dt);
-trajectory.push_back(x_current);
+    // Run genetic algorithm to get optimal control
+    ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50,
+                                      time_horizon, 0.01, mesh_map);
+    x_current = dynamics(x_current, optimal_control[0], dt);
+    trajectory.push_back(x_current);
+    geometry_msgs::msg::TwistStamped twist_msg;
+    twist_msg.header = header;
+    twist_msg.header.stamp = node->now();
+    twist_msg.twist.linear.x = optimal_control[0][0];
+    twist_msg.twist.angular.z = optimal_control[0][1];
+    twist_pub->publish(twist_msg);
 
-// Calculate distance to goal
-double dist = std::sqrt(std::pow(x_current[0] - goal_point[0], 2) +
-       std::pow(x_current[1] - goal_point[1], 2) +
-       std::pow(x_current[2] - goal_point[2], 2));
 
-if (dist < goal_threshold)
-{
-// Publish final point
-point_msg.header.stamp = node->now();
-point_msg.point.x = x_current[0];
-point_msg.point.y = x_current[1];
-point_msg.point.z = x_current[2];
-point_pub->publish(point_msg);
-return trajectory;
-}
-}
+    // Calculate distance to goal
+    double dist = std::sqrt(std::pow(x_current[0] - goal_point[0], 2) +
+          std::pow(x_current[1] - goal_point[1], 2) +
+          std::pow(x_current[2] - goal_point[2], 2));
 
-RCLCPP_WARN(node->get_logger(), "Max steps reached without reaching the goal.");
-return {};
+    if (dist < goal_threshold)
+    {
+    // Publish final point
+    point_msg.header.stamp = node->now();
+    point_msg.point.x = x_current[0];
+    point_msg.point.y = x_current[1];
+    point_msg.point.z = x_current[2];
+    point_pub->publish(point_msg);
+    return trajectory;
+    }
+    }
+
+    RCLCPP_WARN(node->get_logger(), "Max steps reached without reaching the goal.");
+    return {};
 }
 
 // Helper function to calculate yaw from quaternion
