@@ -31,6 +31,7 @@ bool GAKDMeshPlanner::initialize(const std::string& plugin_name, const std::shar
   node_ = node;
 
   path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/path", rclcpp::QoS(1).transient_local());
+  auto point_pub_ = node->create_publisher<geometry_msgs::msg::PointStamped>("~/current_point", rclcpp::QoS(10).transient_local());
 
   return true;
 }
@@ -41,18 +42,99 @@ bool GAKDMeshPlanner::cancel()
   return true;
 }
 
+
+boost::optional<std::pair<std::vector<mesh_map::Vector>, mesh_map::Vector>>  findClosestFace(const mesh_map::Vector &position,
+  const mesh_map::MeshMap::Ptr& mesh_map)
+{
+    const auto& mesh = mesh_map->mesh();
+    const auto& face_normals = mesh_map->faceNormals();
+
+    const auto& vH_opt = mesh_map->getNearestVertexHandle(position);
+
+    if (!vH_opt)
+    {
+        return boost::none;
+    }
+
+    auto vH = vH_opt.unwrap();
+    
+    std::vector<lvr2::FaceHandle> faces;
+    mesh->getFacesOfVertex(vH, faces);
+    
+    if (faces.empty())
+    {
+        return boost::none;
+    }
+
+    float min_distance = std::numeric_limits<float>::max();
+    std::vector<mesh_map::Vector> closest_face_vertices;
+    mesh_map::Vector closest_face_normal;
+
+    for (const auto &fH : faces)
+    {
+        auto vertex_handles = mesh->getVerticesOfFace(fH);
+        
+        std::array<mesh_map::Vector, 3> vertices;
+        for (size_t i = 0; i < 3; i++)
+        {
+            vertices[i] = mesh->getVertexPosition(vertex_handles[i]);
+        }
+
+        float face_dist = (vertices[0] - position).length2() +
+                          (vertices[1] - position).length2() +
+                          (vertices[2] - position).length2();
+
+        if (face_dist < min_distance)
+        {
+            min_distance = face_dist;
+            closest_face_normal = face_normals[fH];
+            closest_face_vertices = {vertices[0], vertices[1], vertices[2]};
+        }
+    }
+
+    return std::make_pair(closest_face_vertices, closest_face_normal);
+}
+
+boost::optional<std::pair<mesh_map::Vector, float>> projectToFaceAndDistance(const mesh_map::Vector& position,
+   const mesh_map::MeshMap::Ptr& mesh_map) {
+    auto closestFace = findClosestFace(position,mesh_map);
+    if (!closestFace) {
+        return boost::none;
+    }
+
+    const auto& vertices = closestFace->first;
+    const auto& normal = closestFace->second;
+
+    mesh_map::Vector v0 = vertices[0];
+    mesh_map::Vector v1 = vertices[1];
+    mesh_map::Vector v2 = vertices[2];
+
+    mesh_map::Vector edge1 = v1 - v0;
+    mesh_map::Vector edge2 = v2 - v0;
+    mesh_map::Vector pointToV0 = position - v0;
+    
+    float d = pointToV0.dot(normal) / normal.length();
+    mesh_map::Vector projectedPoint = position - normal * d;
+
+    float signedDistance = pointToV0.dot(normal) / normal.length();
+
+    return std::make_pair(projectedPoint, signedDistance);
+}
+
 // Type definitions for genetic algorithm
 typedef std::vector<double> State;
 typedef std::vector<State> Trajectory;
 typedef std::vector<double> Control;
 typedef std::vector<Control> ControlSequence;
 
-State dynamics(const State& x, const Control& u, double dt)
+State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map)
 {
-  return {x[0] + u[0] * cos(x[3]) * dt,
-          x[1] + u[0] * sin(x[3]) * dt,
+  return {x[0] + u[0] * cos(x[5]) * dt,
+          x[1] + u[0] * sin(x[5]) * dt,
           x[2],
-          x[3] + u[1] * dt};
+          x[3],
+          x[4],
+          x[5] + u[1] * dt};
 }
 
 Control random_control()
@@ -60,9 +142,9 @@ Control random_control()
   std::random_device rd;
   std::mt19937 gen(rd());
   const double min_velocity = -1.0;
-  const double max_velocity = 5.0;
+  const double max_velocity = 2.0;
   const double min_omega = -1.0;
-  const double max_omega = 3.0;
+  const double max_omega = 1.0;
   std::uniform_real_distribution<> dis_velocity(min_velocity, max_velocity);
   std::uniform_real_distribution<> dis_steering(min_omega, max_omega);
   return {dis_velocity(gen), dis_steering(gen)};
@@ -177,7 +259,7 @@ ControlSequence genetic_algorithm(const State& state_init, const State& state_ta
       double total_cost = 0.0;
       for (const auto& control : population[i])
       {
-        State next_state = dynamics(current_state, control, dt);
+        State next_state = dynamics(current_state, control, dt,mesh_map);
         total_cost += cost_function(current_state, next_state, control, state_target, mesh_map);
         current_state = next_state;
       }
@@ -218,7 +300,7 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
 
     double dt = 0.1;
     int max_steps = 1000;
-    double goal_threshold = 0.3;
+    double goal_threshold = 0.5;
     Trajectory trajectory;
     State x_current = start_point;
     trajectory.push_back(x_current);
@@ -239,22 +321,22 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
     point_pub->publish(point_msg);
 
     // Run genetic algorithm to get optimal control
-    ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50,
-                                      time_horizon, 0.01, mesh_map);
-    x_current = dynamics(x_current, optimal_control[0], dt);
+    ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50,time_horizon, 0.01, mesh_map);
+    x_current = dynamics(x_current, optimal_control[0], dt, mesh_map);
     trajectory.push_back(x_current);
-    geometry_msgs::msg::TwistStamped twist_msg;
-    twist_msg.header = header;
-    twist_msg.header.stamp = node->now();
-    twist_msg.twist.linear.x = optimal_control[0][0];
-    twist_msg.twist.angular.z = optimal_control[0][1];
-    twist_pub->publish(twist_msg);
+
+    // Publish velocities
+    // geometry_msgs::msg::TwistStamped twist_msg;
+    // twist_msg.header = header;
+    // twist_msg.header.stamp = node->now();
+    // twist_msg.twist.linear.x = optimal_control[0][0];
+    // twist_msg.twist.angular.z = optimal_control[0][1];
+    // twist_pub->publish(twist_msg);
 
 
     // Calculate distance to goal
-    double dist = std::sqrt(std::pow(x_current[0] - goal_point[0], 2) +
-          std::pow(x_current[1] - goal_point[1], 2) +
-          std::pow(x_current[2] - goal_point[2], 2));
+    double dist = std::sqrt(std::pow(x_current[0] - goal_point[0], 2) + 
+     std::pow(x_current[1] - goal_point[1], 2) + std::pow(x_current[2] - goal_point[2], 2));
 
     if (dist < goal_threshold)
     {
@@ -272,33 +354,33 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
     return {};
 }
 
-// Helper function to calculate yaw from quaternion
-double getYawFromQuaternion(const geometry_msgs::msg::Quaternion& q)
+
+std::tuple<double, double, double> getRPYFromQuaternion(const geometry_msgs::msg::Quaternion& q)
 {
   tf2::Quaternion quat(q.x, q.y, q.z, q.w);
   tf2::Matrix3x3 m(quat);
   double roll, pitch, yaw;
   m.getRPY(roll, pitch, yaw);
-  return yaw;
+  return std::make_tuple(roll, pitch, yaw);
 }
 
 
 uint32_t GAKDMeshPlanner::makePlan(const geometry_msgs::msg::PoseStamped& start,
-  const geometry_msgs::msg::PoseStamped& goal,
-  double tolerance,
-  std::vector<geometry_msgs::msg::PoseStamped>& plan,
-  double& cost,
-  std::string& message)
+  const geometry_msgs::msg::PoseStamped& goal, double tolerance, std::vector<geometry_msgs::msg::PoseStamped>& plan,
+  double& cost, std::string& message)
 {
-const auto& mesh = mesh_map_->mesh();
 mesh_map::Vector start_vec = mesh_map::toVector(start.pose.position);
 mesh_map::Vector goal_vec = mesh_map::toVector(goal.pose.position);
 
 // Prepare state for genetic algorithm
-State start_state = std::vector<double>{start.pose.position.x, start.pose.position.y, start.pose.position.z,
-         getYawFromQuaternion(start.pose.orientation)};
-State goal_state = std::vector<double>{goal.pose.position.x, goal.pose.position.y, goal.pose.position.z,
-        getYawFromQuaternion(goal.pose.orientation)};
+double roll_start, pitch_start, yaw_start;
+std::tie(roll_start, pitch_start, yaw_start) = getRPYFromQuaternion(start.pose.orientation);
+State start_state = std::vector<double>{start.pose.position.x,start.pose.position.y, start.pose.position.z, roll_start, pitch_start, yaw_start};
+
+double roll_goal, pitch_goal, yaw_goal;
+std::tie(roll_goal, pitch_goal, yaw_goal) = getRPYFromQuaternion(goal.pose.orientation);
+
+State goal_state = std::vector<double>{goal.pose.position.x, goal.pose.position.y, goal.pose.position.z, roll_goal, pitch_goal, yaw_goal};
 
 // Run genetic algorithm planner
 Trajectory traj = ga_planner(start_state, goal_state, 10, mesh_map_, node_, cancel_planning_);
