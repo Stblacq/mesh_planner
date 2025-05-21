@@ -19,10 +19,10 @@
         </mesh>
       </geometry>
       <material>
-        <ambient>1 1 1 1</ambient>
-        <diffuse>1 1 1 1</diffuse>
-        <specular>0 0 0 1</specular>
-        <emissive>0 0 0 1</emissive>
+          <ambient>0.757 0.604 0.420 1</ambient>
+          <diffuse>0.757 0.604 0.420 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <emissive>0 0 0 1</emissive>
       </material>
     </visual>
   </link>

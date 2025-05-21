@@ -129,12 +129,59 @@ typedef std::vector<Control> ControlSequence;
 
 State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map)
 {
-  return {x[0] + u[0] * cos(x[5]) * dt,
-          x[1] + u[0] * sin(x[5]) * dt,
-          x[2],
-          x[3],
-          x[4],
-          x[5] + u[1] * dt};
+    // Extract state variables
+    double x_pos = x[0];     // x position
+    double y_pos = x[1];     // y position
+    double theta = x[4];     // pitch angle
+    double psi = x[5];       // yaw angle
+    
+    // Control inputs
+    double u0 = u[0];        // linear velocity in x-direction
+    double u1 = u[1];        // angular velocity about z-axis
+
+    // Calculate next position
+    double x_next = x_pos + u0 * cos(theta) * cos(psi) * dt;
+    double y_next = y_pos + u0 * cos(theta) * sin(psi) * dt;
+
+    // Get terrain height and gradients at the next position
+    mesh_map::Vector position{static_cast<float>(x_next), static_cast<float>(y_next), 0.0f};
+    auto proj_opt = projectToFaceAndDistance(position, mesh_map);
+    
+    if (!proj_opt)
+    {
+        // Return current state if projection fails
+        return x;
+    }
+
+    // Extract projected point and compute terrain height
+    mesh_map::Vector projected_point = proj_opt->first;
+    double z_next = projected_point.z;
+
+    // Get the closest face to compute gradients
+    auto face_opt = findClosestFace(position, mesh_map);
+    if (!face_opt)
+    {
+        // Return current state if face lookup fails
+        return x;
+    }
+
+    // Extract face vertices and normal
+    const auto& vertices = face_opt->first;
+    const auto& normal = face_opt->second;
+
+    // Compute partial derivatives using the face normal
+    double dh_dx = -normal.x / (normal.z + 1e-6); // ∂h/∂x
+    double dh_dy = -normal.y / (normal.z + 1e-6); // ∂h/∂y
+
+    // Compute roll (phi) and pitch (theta) based on terrain gradients
+    double phi_next = atan2(-dh_dy, sqrt(1.0 + dh_dx * dh_dx));
+    double theta_next = atan2(dh_dx, sqrt(1.0 + dh_dy * dh_dy));
+
+    // Compute next yaw
+    double psi_next = psi + u1 * dt;
+
+    // Return next state
+    return {x_next, y_next, z_next, phi_next, theta_next, psi_next};
 }
 
 Control random_control()
