@@ -4,6 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable
@@ -116,23 +117,40 @@ def generate_launch_description():
     bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
-        parameters=[
-            {
-                "config_file": PathJoinSubstitution(
-                    [pkg_terrain_nav_sim, "config", "ros_gazebo_bridge.yaml"]
-                ),
-            }
-        ],
+        parameters=[{"config_file": PathJoinSubstitution([pkg_terrain_nav_sim, "config", "ros_gazebo_bridge.yaml"]),}],
         output="screen",
     )
+    robot_controllers = PathJoinSubstitution([FindPackageShare("scout_description"),"config","control.yaml",])
+
+    # Controller Manager Node
+    # controller_manager = Node(package="controller_manager",
+    #                           executable="ros2_control_node",
+    #                           parameters=[robot_controllers],
+    #                           output="both",)
+
+   # Joint State Broadcaster Spawner
+    joint_state_broadcaster_spawner = Node(package="controller_manager", executable="spawner", arguments=["scout_state_broadcaster"], output="both",)
+
+    # Diff Drive Controller Spawner
+    diff_drive_controller_spawner = Node(package="controller_manager", executable="spawner", arguments=["scout_base_controller"], output="both", )
+
+    relay_odom = Node( name="relay_odom", package="topic_tools", executable="relay",
+    parameters=[{"input_topic": "/scout_base_controller/odom", "output_topic": "/odom",}], output="both",)
+
+    relay_cmd_vel = Node(name="relay_cmd_vel", package="topic_tools", executable="relay",
+        parameters=[{"input_topic": "/cmd_vel", "output_topic": "/scout_base_controller/cmd_vel",}],output="both",)
 
     return LaunchDescription([
-    set_ign_resource_path,
-    set_gz_model_path,
-    *launch_args,
-    gz_sim,
-    spawn_robot,
-    bridge,
-    robot_state_publisher
-])
-
+        set_ign_resource_path,
+        set_gz_model_path,
+        *launch_args,
+        gz_sim,
+        spawn_robot,
+        bridge,
+        robot_state_publisher,
+        # controller_manager,
+        joint_state_broadcaster_spawner,
+        diff_drive_controller_spawner,
+        relay_odom,
+        relay_cmd_vel
+    ])

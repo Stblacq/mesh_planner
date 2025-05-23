@@ -32,7 +32,25 @@
     <xacro:property name="imu_offset_y" value="0"/>
     <xacro:property name="imu_offset_z" value="${-base_z_size/2 + 0.005 + 0.007}"/>
 
-    <!-- Base link -->
+    <!-- Dummy Root Link -->
+    <link name="dummy_base_link">
+        <!-- No inertial properties for the root link -->
+        <visual>
+            <geometry>
+                <box size="0.001 0.001 0.001" />
+            </geometry>
+            <material name="transparent">
+                <color rgba="0 0 0 0" />
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.001 0.001 0.001" />
+            </geometry>
+        </collision>
+    </link>
+
+    <!-- Base Link -->
     <link name="base_link">
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
@@ -52,6 +70,13 @@
             <inertia ixx="2.288641" ixy="0" ixz="0" iyy="5.103976" iyz="0" izz="3.431465" />
         </inertial>
     </link>
+
+    <!-- Joint connecting dummy_base_link to base_link -->
+    <joint name="dummy_to_base_joint" type="fixed">
+        <parent link="dummy_base_link" />
+        <child link="base_link" />
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </joint>
 
     <link name="base_footprint"/>
 
@@ -168,7 +193,7 @@
             <always_on>1</always_on>
             <update_rate>100</update_rate>
             <visualize>false</visualize>
-            <topic>/model/scout_mini/imu</topic>
+            <topic>/model/robot/imu</topic>
             <frame_id>imu</frame_id>
             <gz_frame_id>imu</gz_frame_id>
             <ign_frame_id>imu</ign_frame_id>
@@ -178,7 +203,7 @@
     <gazebo reference="laser2d">
         <sensor name="laser2d" type="gpu_lidar">
             <pose relative_to="laser2d">0 0 0 0 0 0</pose>
-            <topic>/model/scout_mini/scan</topic>
+            <topic>/model/robot/scan</topic>
             <update_rate>10</update_rate>
             <ray>
                 <scan>
@@ -212,7 +237,7 @@
     <gazebo reference="laser3d">
         <sensor name="laser3d" type="gpu_lidar">
             <pose relative_to="laser3d">0 0 0 0 0 0</pose>
-            <topic>/model/scout_mini/cloud</topic>
+            <topic>/model/robot/cloud</topic>
             <update_rate>10</update_rate>
             <ray>
                 <scan>
@@ -245,55 +270,6 @@
 
     <gazebo>
         <plugin
-            filename="libignition-gazebo-diff-drive-system.so"
-            name="ignition::gazebo::systems::DiffDrive">
-            <num_wheel_pairs>2</num_wheel_pairs>
-            <!-- wheels0 -->
-            <left_joint>front_left_wheel</left_joint>
-            <right_joint>front_right_wheel</right_joint>
-            <wheel_separation>${track}</wheel_separation>
-            <wheel_radius>${wheel_radius}</wheel_radius>
-            <!-- wheels1 -->
-            <left_joint>rear_left_wheel</left_joint>
-            <right_joint>rear_right_wheel</right_joint>
-            <wheel_separation>${track}</wheel_separation>
-            <wheel_radius>${wheel_radius}</wheel_radius>
-            <odom_publish_frequency>50</odom_publish_frequency>
-            <frame_id>odom</frame_id>
-            <child_frame_id>base_footprint</child_frame_id>
-            <tf_topic>/model/scout_mini/tf_odom</tf_topic>
-        </plugin>
-    </gazebo>
-
-    <gazebo>
-        <plugin
-            filename="libignition-gazebo-joint-state-publisher-system.so"
-            name="ignition::gazebo::systems::JointStatePublisher">
-            <joint_name>front_right_wheel</joint_name>
-            <topic>/model/scout_mini/joint_states</topic>
-        </plugin>
-        <plugin
-            filename="libignition-gazebo-joint-state-publisher-system.so"
-            name="ignition::gazebo::systems::JointStatePublisher">
-            <joint_name>front_left_wheel</joint_name>
-            <topic>/model/scout_mini/joint_states</topic>
-        </plugin>
-        <plugin
-            filename="libignition-gazebo-joint-state-publisher-system.so"
-            name="ignition::gazebo::systems::JointStatePublisher">
-            <joint_name>rear_right_wheel</joint_name>
-            <topic>/model/scout_mini/joint_states</topic>
-        </plugin>
-        <plugin
-            filename="libignition-gazebo-joint-state-publisher-system.so"
-            name="ignition::gazebo::systems::JointStatePublisher">
-            <joint_name>rear_left_wheel</joint_name>
-            <topic>/model/scout_mini/joint_states</topic>
-        </plugin>
-    </gazebo>
-
-    <gazebo>
-        <plugin
             filename="ignition-gazebo-pose-publisher-system"
             name="gz::sim::systems::PosePublisher">
             <use_pose_vector_msg>true</use_pose_vector_msg>
@@ -301,5 +277,37 @@
             <static_publisher>true</static_publisher>
         </plugin>
     </gazebo>
+
+       <ros2_control name="ScoutMiniGazeboSystem" type="system">
+            <hardware>
+                <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+            </hardware>
+            <joint name="front_left_wheel">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="front_right_wheel">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="rear_left_wheel">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="rear_right_wheel">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+
+        <gazebo>
+            <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+                <parameters>$(find scout_description)/config/control.yaml</parameters>
+            </plugin>
+        </gazebo>
 
 </robot>

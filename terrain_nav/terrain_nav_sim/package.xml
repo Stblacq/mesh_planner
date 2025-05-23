@@ -3,10 +3,9 @@
 <package format="3">
   <name>terrain_nav_sim</name>
   <version>0.0.1</version>
-  <description>Tutorials for mobile robot navigation in 3D, using mesh maps.</description>
+  <description>Uneven terrain navigation, using mesh maps.</description>
   
-  <maintainer email="matthias.holoch@naturerobots.com">Matthias Holoch</maintainer>
-  <maintainer email="amock@uos.de">Alexander Mock</maintainer>
+  <maintainer email="o.jerome@iee.org">Otto Jerome</maintainer>
   
   <license>BSD-3-Clause</license>
 
