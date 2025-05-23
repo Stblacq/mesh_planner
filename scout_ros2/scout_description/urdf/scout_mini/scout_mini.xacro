@@ -32,23 +32,8 @@
     <xacro:property name="imu_offset_y" value="0"/>
     <xacro:property name="imu_offset_z" value="${-base_z_size/2 + 0.005 + 0.007}"/>
 
-    <!-- Dummy Root Link -->
-    <link name="dummy_base_link">
-        <!-- No inertial properties for the root link -->
-        <visual>
-            <geometry>
-                <box size="0.001 0.001 0.001" />
-            </geometry>
-            <material name="transparent">
-                <color rgba="0 0 0 0" />
-            </material>
-        </visual>
-        <collision>
-            <geometry>
-                <box size="0.001 0.001 0.001" />
-            </geometry>
-        </collision>
-    </link>
+    <!-- Base Footprint (Root Link) -->
+    <link name="base_footprint"/>
 
     <!-- Base Link -->
     <link name="base_link">
@@ -71,19 +56,11 @@
         </inertial>
     </link>
 
-    <!-- Joint connecting dummy_base_link to base_link -->
-    <joint name="dummy_to_base_joint" type="fixed">
-        <parent link="dummy_base_link" />
+    <!-- Joint connecting base_footprint to base_link -->
+    <joint name="base_footprint_to_base_joint" type="fixed">
+        <parent link="base_footprint" />
         <child link="base_link" />
-        <origin xyz="0 0 0" rpy="0 0 0" />
-    </joint>
-
-    <link name="base_footprint"/>
-
-    <joint name="base_footprint_joint" type="fixed">
-        <origin xyz="0 0 ${wheel_vertical_offset - wheel_radius}" rpy="0 0 0" />
-        <parent link="base_link" />
-        <child link="base_footprint" />
+        <origin xyz="0 0 ${wheel_radius - wheel_vertical_offset}" rpy="0 0 0" />
     </joint>
 
     <!-- IMU Sensor -->
@@ -187,7 +164,7 @@
         <origin xyz="${-wheelbase/2} ${-track/2} ${wheel_vertical_offset}" rpy="3.14 0 0" />
     </xacro:scout_mini_wheel>
 
-    <!-- Gazebo Plugins -->
+    <!-- Gazebo Plugins (Unchanged) -->
     <gazebo reference="imu">
         <sensor name="imu" type="imu">
             <always_on>1</always_on>
@@ -278,36 +255,36 @@
         </plugin>
     </gazebo>
 
-       <ros2_control name="ScoutMiniGazeboSystem" type="system">
-            <hardware>
-                <plugin>gz_ros2_control/GazeboSimSystem</plugin>
-            </hardware>
-            <joint name="front_left_wheel">
-                <command_interface name="velocity"/>
-                <state_interface name="position"/>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="front_right_wheel">
-                <command_interface name="velocity"/>
-                <state_interface name="position"/>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="rear_left_wheel">
-                <command_interface name="velocity"/>
-                <state_interface name="position"/>
-                <state_interface name="velocity"/>
-            </joint>
-            <joint name="rear_right_wheel">
-                <command_interface name="velocity"/>
-                <state_interface name="position"/>
-                <state_interface name="velocity"/>
-            </joint>
-        </ros2_control>
+    <ros2_control name="ScoutMiniGazeboSystem" type="system">
+        <hardware>
+            <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </hardware>
+        <joint name="front_left_wheel">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="front_right_wheel">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="rear_left_wheel">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+        <joint name="rear_right_wheel">
+            <command_interface name="velocity"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+        </joint>
+    </ros2_control>
 
-        <gazebo>
-            <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-                <parameters>$(find scout_description)/config/control.yaml</parameters>
-            </plugin>
-        </gazebo>
+    <gazebo>
+        <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+            <parameters>$(find scout_description)/config/control.yaml</parameters>
+        </plugin>
+    </gazebo>
 
 </robot>
