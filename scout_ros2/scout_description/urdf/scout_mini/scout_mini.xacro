@@ -152,7 +152,7 @@
 
     <!-- Scout wheel macros -->
     <xacro:scout_mini_wheel wheel_prefix="front_right">
-        <origin xyz="${wheelbase/2} ${-track/2} ${wheel_vertical_offset}" rpy="3.14 0 0" />
+        <origin xyz="${wheelbase/2} ${-track/2} ${wheel_vertical_offset}" rpy="0 0 0" />
     </xacro:scout_mini_wheel>
     <xacro:scout_mini_wheel wheel_prefix="front_left">
         <origin xyz="${wheelbase/2} ${track/2} ${wheel_vertical_offset}" rpy="0 0 0" />
@@ -161,7 +161,7 @@
         <origin xyz="${-wheelbase/2} ${track/2} ${wheel_vertical_offset}" rpy="0 0 0" />
     </xacro:scout_mini_wheel>
     <xacro:scout_mini_wheel wheel_prefix="rear_right">
-        <origin xyz="${-wheelbase/2} ${-track/2} ${wheel_vertical_offset}" rpy="3.14 0 0" />
+        <origin xyz="${-wheelbase/2} ${-track/2} ${wheel_vertical_offset}" rpy="0 0 0" />
     </xacro:scout_mini_wheel>
 
     <!-- Gazebo Plugins (Unchanged) -->

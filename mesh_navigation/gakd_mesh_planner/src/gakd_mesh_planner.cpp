@@ -8,7 +8,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "gakd_mesh_planner/gakd_mesh_planner.h"
 #include "geometry_msgs/msg/twist_stamped.hpp"
-
+#include <nav_msgs/msg/odometry.hpp>
 
 PLUGINLIB_EXPORT_CLASS(gakd_mesh_planner::GAKDMeshPlanner, mbf_mesh_core::MeshPlanner);
 
@@ -127,71 +127,93 @@ typedef std::vector<State> Trajectory;
 typedef std::vector<double> Control;
 typedef std::vector<Control> ControlSequence;
 
-State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map)
-{
+// State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map)
+// {
+//     // Extract state variables
+//     double x_pos = x[0];     // x position
+//     double y_pos = x[1];     // y position
+//     double theta = x[4];     // pitch angle
+//     double psi = x[5];       // yaw angle
+    
+//     // Control inputs
+//     double u0 = u[0];        // linear velocity in x-direction
+//     double u1 = u[1];        // angular velocity about z-axis
+
+//     // Calculate next position
+//     double x_next = x_pos + u0 * cos(theta) * cos(psi) * dt;
+//     double y_next = y_pos + u0 * cos(theta) * sin(psi) * dt;
+
+//     // Get terrain height and gradients at the next position
+//     mesh_map::Vector position{static_cast<float>(x_next), static_cast<float>(y_next), 0.0f};
+//     auto proj_opt = projectToFaceAndDistance(position, mesh_map);
+    
+//     if (!proj_opt)
+//     {
+//         // Return current state if projection fails
+//         return x;
+//     }
+
+//     // Extract projected point and compute terrain height
+//     mesh_map::Vector projected_point = proj_opt->first;
+//     double z_next = projected_point.z;
+
+//     // Get the closest face to compute gradients
+//     auto face_opt = findClosestFace(position, mesh_map);
+//     if (!face_opt)
+//     {
+//         // Return current state if face lookup fails
+//         return x;
+//     }
+
+//     // Extract face vertices and normal
+//     const auto& vertices = face_opt->first;
+//     const auto& normal = face_opt->second;
+
+//     // Compute partial derivatives using the face normal
+//     double dh_dx = -normal.x / (normal.z + 1e-6); // ∂h/∂x
+//     double dh_dy = -normal.y / (normal.z + 1e-6); // ∂h/∂y
+
+//     // Compute roll (phi) and pitch (theta) based on terrain gradients
+//     double phi_next = atan2(-dh_dy, sqrt(1.0 + dh_dx * dh_dx));
+//     double theta_next = atan2(dh_dx, sqrt(1.0 + dh_dy * dh_dy));
+
+//     // Compute next yaw
+//     double psi_next = psi + u1 * dt;
+
+//     // Return next state
+//     return {x_next, y_next, z_next, phi_next, theta_next, psi_next};
+// }
+
+State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map) {
     // Extract state variables
     double x_pos = x[0];     // x position
     double y_pos = x[1];     // y position
-    double theta = x[4];     // pitch angle
+    double z_pos = x[2];     // z position (height, unchanged)
+    double phi = x[3];       // roll angle (unchanged)
+    double theta = x[4];     // pitch angle (unchanged)
     double psi = x[5];       // yaw angle
-    
+
     // Control inputs
-    double u0 = u[0];        // linear velocity in x-direction
-    double u1 = u[1];        // angular velocity about z-axis
+    double u0 = u[1];        // linear velocity in x-direction
+    double u1 = u[0];        // angular velocity about z-axis
 
-    // Calculate next position
-    double x_next = x_pos + u0 * cos(theta) * cos(psi) * dt;
-    double y_next = y_pos + u0 * cos(theta) * sin(psi) * dt;
+    // Calculate next state using GakdMeshPlanner::dynamics logic for x[0], x[1], x[3]
+    double x_next = x_pos + u0 * cos(psi) * dt;  // Update x position (x[0])
+    double y_next = y_pos + u0 * sin(psi) * dt;  // Update y position (x[1])
+    double psi_next = psi + u1 * dt;             // Update yaw (x[5], corresponds to x[3])
 
-    // Get terrain height and gradients at the next position
-    mesh_map::Vector position{static_cast<float>(x_next), static_cast<float>(y_next), 0.0f};
-    auto proj_opt = projectToFaceAndDistance(position, mesh_map);
-    
-    if (!proj_opt)
-    {
-        // Return current state if projection fails
-        return x;
-    }
-
-    // Extract projected point and compute terrain height
-    mesh_map::Vector projected_point = proj_opt->first;
-    double z_next = projected_point.z;
-
-    // Get the closest face to compute gradients
-    auto face_opt = findClosestFace(position, mesh_map);
-    if (!face_opt)
-    {
-        // Return current state if face lookup fails
-        return x;
-    }
-
-    // Extract face vertices and normal
-    const auto& vertices = face_opt->first;
-    const auto& normal = face_opt->second;
-
-    // Compute partial derivatives using the face normal
-    double dh_dx = -normal.x / (normal.z + 1e-6); // ∂h/∂x
-    double dh_dy = -normal.y / (normal.z + 1e-6); // ∂h/∂y
-
-    // Compute roll (phi) and pitch (theta) based on terrain gradients
-    double phi_next = atan2(-dh_dy, sqrt(1.0 + dh_dx * dh_dx));
-    double theta_next = atan2(dh_dx, sqrt(1.0 + dh_dy * dh_dy));
-
-    // Compute next yaw
-    double psi_next = psi + u1 * dt;
-
-    // Return next state
-    return {x_next, y_next, z_next, phi_next, theta_next, psi_next};
+    // Return next state, propagating z, phi, theta unchanged
+    return {x_next, y_next, z_pos, phi, theta, psi_next};
 }
 
 Control random_control()
 {
   std::random_device rd;
   std::mt19937 gen(rd());
-  const double min_velocity = -1.0;
-  const double max_velocity = 2.0;
-  const double min_omega = -1.0;
-  const double max_omega = 1.0;
+  const double min_velocity = -1.;
+  const double max_velocity = 1.0;
+  const double min_omega = -1;
+  const double max_omega = 5.0;
   std::uniform_real_distribution<> dis_velocity(min_velocity, max_velocity);
   std::uniform_real_distribution<> dis_steering(min_omega, max_omega);
   return {dis_velocity(gen), dis_steering(gen)};
@@ -338,12 +360,24 @@ ControlSequence genetic_algorithm(const State& state_init, const State& state_ta
 }
 
 Trajectory ga_planner(const State& start_point, const State& goal_point,
-  double time_horizon, const mesh_map::MeshMap::Ptr& mesh_map,
-  rclcpp::Node::SharedPtr node, std::atomic_bool& cancel_planning)
+                      double time_horizon, const mesh_map::MeshMap::Ptr& mesh_map,
+                      rclcpp::Node::SharedPtr node, std::atomic_bool& cancel_planning)
 {
-    // Initialize publisher for x_current visualization
+    // Initialize publishers
     auto point_pub = node->create_publisher<geometry_msgs::msg::PointStamped>("~/current_point", rclcpp::QoS(10));
     auto twist_pub = node->create_publisher<geometry_msgs::msg::TwistStamped>("~/cmd_vel", rclcpp::QoS(10));
+
+    // Initialize current_state for odometry
+    geometry_msgs::msg::Pose current_state; // Stores latest pose from odometry
+    bool odom_received = false; // Tracks if any odometry message has been received
+
+    // Subscribe to /odom
+    // auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
+    //     "/odometry/filtered", rclcpp::QoS(10),
+    //     [&current_state, &odom_received](const nav_msgs::msg::Odometry::SharedPtr msg) {
+    //         current_state = msg->pose.pose; // Update current_state with latest pose
+    //         odom_received = true;
+    //     });
 
     double dt = 0.1;
     int max_steps = 1000;
@@ -352,55 +386,82 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
     State x_current = start_point;
     trajectory.push_back(x_current);
 
-    // Prepare header for PointStamped messages
+    // Prepare header for messages
     std_msgs::msg::Header header;
     header.frame_id = mesh_map->mapFrame();
 
     for (int step = 0; step < max_steps && !cancel_planning; ++step)
     {
-    // Publish x_current as a PointStamped message
-    geometry_msgs::msg::PointStamped point_msg;
-    point_msg.header = header;
-    point_msg.header.stamp = node->now();
-    point_msg.point.x = x_current[0];
-    point_msg.point.y = x_current[1];
-    point_msg.point.z = x_current[2];
-    point_pub->publish(point_msg);
+        // Publish x_current as a PointStamped message
+        geometry_msgs::msg::PointStamped point_msg;
+        point_msg.header = header;
+        point_msg.header.stamp = node->now();
+        point_msg.point.x = x_current[0];
+        point_msg.point.y = x_current[1];
+        point_msg.point.z = x_current[2];
+        point_pub->publish(point_msg);
 
-    // Run genetic algorithm to get optimal control
-    ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50,time_horizon, 0.01, mesh_map);
-    x_current = dynamics(x_current, optimal_control[0], dt, mesh_map);
-    trajectory.push_back(x_current);
+        // Run genetic algorithm to get optimal control
+        ControlSequence optimal_control = genetic_algorithm(x_current, goal_point, dt, 100, 50, time_horizon, 0.01, mesh_map);
 
-    // Publish velocities
-    // geometry_msgs::msg::TwistStamped twist_msg;
-    // twist_msg.header = header;
-    // twist_msg.header.stamp = node->now();
-    // twist_msg.twist.linear.x = optimal_control[0][0];
-    // twist_msg.twist.angular.z = optimal_control[0][1];
-    // twist_pub->publish(twist_msg);
+        // Publish velocities
+        geometry_msgs::msg::TwistStamped twist_msg;
+        twist_msg.header = header;
+        twist_msg.header.stamp = node->now();
+        twist_msg.twist.linear.x = optimal_control[0][0];
+        twist_msg.twist.angular.z = optimal_control[0][1];
+        twist_pub->publish(twist_msg);
 
+        // Wait for dt seconds
+        rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(dt)));
 
-    // Calculate distance to goal
-    double dist = std::sqrt(std::pow(x_current[0] - goal_point[0], 2) + 
-     std::pow(x_current[1] - goal_point[1], 2) + std::pow(x_current[2] - goal_point[2], 2));
+        // // Update x_current using current_state from odometry
+        // if (odom_received) {
+        //     x_current[0] = current_state.position.x; // x
+        //     x_current[1] = current_state.position.y; // y
+        //     x_current[2] = current_state.position.z; // z
+        //     // Convert quaternion to Euler angles (roll, pitch, yaw)
+        //     tf2::Quaternion quat(
+        //         current_state.orientation.x,
+        //         current_state.orientation.y,
+        //         current_state.orientation.z,
+        //         current_state.orientation.w
+        //     );
+        //     double roll, pitch, yaw;
+        //     tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+        //     x_current[3] = roll;  // phi
+        //     x_current[4] = pitch; // theta
+        //     x_current[5] = yaw;   // psi
+        // } else {
+        //     // Fallback to dynamics if no odometry data received
+        //     RCLCPP_WARN(node->get_logger(), "No odometry data received at step %d. Using dynamics.", step);
+            x_current = dynamics(x_current, optimal_control[0], dt, mesh_map);
+        // }
 
-    if (dist < goal_threshold)
-    {
-    // Publish final point
-    point_msg.header.stamp = node->now();
-    point_msg.point.x = x_current[0];
-    point_msg.point.y = x_current[1];
-    point_msg.point.z = x_current[2];
-    point_pub->publish(point_msg);
-    return trajectory;
-    }
+        // Add new state to trajectory
+        trajectory.push_back(x_current);
+
+        // Calculate distance to goal
+        double dist = std::sqrt(
+            std::pow(x_current[0] - goal_point[0], 2) +
+            std::pow(x_current[1] - goal_point[1], 2) +
+            std::pow(x_current[2] - goal_point[2], 2));
+
+        if (dist < goal_threshold)
+        {
+            // Publish final point
+            point_msg.header.stamp = node->now();
+            point_msg.point.x = x_current[0];
+            point_msg.point.y = x_current[1];
+            point_msg.point.z = x_current[2];
+            point_pub->publish(point_msg);
+            return trajectory;
+        }
     }
 
     RCLCPP_WARN(node->get_logger(), "Max steps reached without reaching the goal.");
     return {};
 }
-
 
 std::tuple<double, double, double> getRPYFromQuaternion(const geometry_msgs::msg::Quaternion& q)
 {
