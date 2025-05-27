@@ -9,6 +9,9 @@
 #include "gakd_mesh_planner/gakd_mesh_planner.h"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include <nav_msgs/msg/odometry.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 PLUGINLIB_EXPORT_CLASS(gakd_mesh_planner::GAKDMeshPlanner, mbf_mesh_core::MeshPlanner);
 
@@ -194,8 +197,8 @@ State dynamics(const State& x, const Control& u, double dt, const mesh_map::Mesh
     double psi = x[5];       // yaw angle
 
     // Control inputs
-    double u0 = u[1];        // linear velocity in x-direction
-    double u1 = u[0];        // angular velocity about z-axis
+    double u0 = u[0];        // linear velocity in x-direction
+    double u1 = u[1];        // angular velocity about z-axis
 
     // Calculate next state using GakdMeshPlanner::dynamics logic for x[0], x[1], x[3]
     double x_next = x_pos + u0 * cos(psi) * dt;  // Update x position (x[0])
@@ -210,10 +213,10 @@ Control random_control()
 {
   std::random_device rd;
   std::mt19937 gen(rd());
-  const double min_velocity = -1.;
+  const double min_velocity = -1.0;
   const double max_velocity = 1.0;
-  const double min_omega = -1;
-  const double max_omega = 5.0;
+  const double min_omega = -0.5;
+  const double max_omega = 0.5;
   std::uniform_real_distribution<> dis_velocity(min_velocity, max_velocity);
   std::uniform_real_distribution<> dis_steering(min_omega, max_omega);
   return {dis_velocity(gen), dis_steering(gen)};
@@ -359,25 +362,45 @@ ControlSequence genetic_algorithm(const State& state_init, const State& state_ta
   return population[best_idx];
 }
 
+
 Trajectory ga_planner(const State& start_point, const State& goal_point,
                       double time_horizon, const mesh_map::MeshMap::Ptr& mesh_map,
                       rclcpp::Node::SharedPtr node, std::atomic_bool& cancel_planning)
 {
+   // Initialize tf2 buffer and listener
+    tf2_ros::Buffer tf_buffer(node->get_clock());
+    tf2_ros::TransformListener tf_listener(tf_buffer);
+
     // Initialize publishers
     auto point_pub = node->create_publisher<geometry_msgs::msg::PointStamped>("~/current_point", rclcpp::QoS(10));
     auto twist_pub = node->create_publisher<geometry_msgs::msg::TwistStamped>("~/cmd_vel", rclcpp::QoS(10));
 
     // Initialize current_state for odometry
-    geometry_msgs::msg::Pose current_state; // Stores latest pose from odometry
-    bool odom_received = false; // Tracks if any odometry message has been received
+    geometry_msgs::msg::PoseStamped current_state; // Use PoseStamped to store frame and timestamp
+    bool odometry_received = false;
 
-    // Subscribe to /odom
-    // auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
-    //     "/odometry/filtered", rclcpp::QoS(10),
-    //     [&current_state, &odom_received](const nav_msgs::msg::Odometry::SharedPtr msg) {
-    //         current_state = msg->pose.pose; // Update current_state with latest pose
-    //         odom_received = true;
-    //     });
+    // Mutex for thread-safe odometry updates
+    std::mutex odom_mutex;
+
+    auto pose_sub = node->create_subscription<nav_msgs::msg::Odometry>(
+        "/scout_base_controller/odom", 
+        rclcpp::QoS(10),
+        [&current_state, &odometry_received, &odom_mutex, &tf_buffer, &mesh_map, node](const nav_msgs::msg::Odometry::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(odom_mutex);
+            geometry_msgs::msg::PoseStamped pose_in_odom;
+            pose_in_odom.header = msg->header; // odom frame
+            pose_in_odom.pose = msg->pose.pose;
+            try {
+                // Transform pose to map frame using tf2::Duration
+                geometry_msgs::msg::PoseStamped pose_in_map;
+                tf_buffer.transform(pose_in_odom, pose_in_map, mesh_map->mapFrame(), 
+                                    tf2::durationFromSec(1.0)); // Use tf2::durationFromSec
+                current_state = pose_in_map;
+                odometry_received = true;
+            } catch (tf2::TransformException &ex) {
+                RCLCPP_WARN(node->get_logger(), "Transform failed: %s", ex.what());
+            }
+        });
 
     double dt = 0.1;
     int max_steps = 1000;
@@ -415,28 +438,30 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
         // Wait for dt seconds
         rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(dt)));
 
-        // // Update x_current using current_state from odometry
-        // if (odom_received) {
-        //     x_current[0] = current_state.position.x; // x
-        //     x_current[1] = current_state.position.y; // y
-        //     x_current[2] = current_state.position.z; // z
-        //     // Convert quaternion to Euler angles (roll, pitch, yaw)
-        //     tf2::Quaternion quat(
-        //         current_state.orientation.x,
-        //         current_state.orientation.y,
-        //         current_state.orientation.z,
-        //         current_state.orientation.w
-        //     );
-        //     double roll, pitch, yaw;
-        //     tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
-        //     x_current[3] = roll;  // phi
-        //     x_current[4] = pitch; // theta
-        //     x_current[5] = yaw;   // psi
-        // } else {
-        //     // Fallback to dynamics if no odometry data received
-        //     RCLCPP_WARN(node->get_logger(), "No odometry data received at step %d. Using dynamics.", step);
-            x_current = dynamics(x_current, optimal_control[0], dt, mesh_map);
-        // }
+        // Update x_current using current_state from odometry
+        {
+            std::lock_guard<std::mutex> lock(odom_mutex);
+            if (odometry_received) {
+                x_current[0] = current_state.pose.position.x; // x (in map frame)
+                x_current[1] = current_state.pose.position.y; // y (in map frame)
+                x_current[2] = current_state.pose.position.z; // z (in map frame)
+                // Convert quaternion to Euler angles (roll, pitch, yaw)
+                tf2::Quaternion quat(
+                    current_state.pose.orientation.x,
+                    current_state.pose.orientation.y,
+                    current_state.pose.orientation.z,
+                    current_state.pose.orientation.w
+                );
+                double roll, pitch, yaw;
+                tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+                x_current[3] = roll;  // phi
+                x_current[4] = pitch; // theta
+                x_current[5] = yaw;   // psi
+            } else {
+                RCLCPP_WARN(node->get_logger(), "No odometry data received at step %d. Using dynamics.", step);
+                x_current = dynamics(x_current, optimal_control[0], dt, mesh_map);
+            }
+        }
 
         // Add new state to trajectory
         trajectory.push_back(x_current);
@@ -449,7 +474,6 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
 
         if (dist < goal_threshold)
         {
-            // Publish final point
             point_msg.header.stamp = node->now();
             point_msg.point.x = x_current[0];
             point_msg.point.y = x_current[1];
