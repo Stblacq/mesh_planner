@@ -17,6 +17,12 @@ PLUGINLIB_EXPORT_CLASS(gakd_mesh_planner::GAKDMeshPlanner, mbf_mesh_core::MeshPl
 
 namespace gakd_mesh_planner
 {
+
+typedef std::vector<double> State;
+typedef std::vector<State> Trajectory;
+typedef std::vector<double> Control;
+typedef std::vector<Control> ControlSequence;
+
 GAKDMeshPlanner::GAKDMeshPlanner() : cancel_planning_(false)
 {
 }
@@ -101,9 +107,7 @@ boost::optional<std::pair<std::vector<mesh_map::Vector>, mesh_map::Vector>>  fin
 boost::optional<std::pair<mesh_map::Vector, float>> projectToFaceAndDistance(const mesh_map::Vector& position,
    const mesh_map::MeshMap::Ptr& mesh_map) {
     auto closestFace = findClosestFace(position,mesh_map);
-    if (!closestFace) {
-        return boost::none;
-    }
+    if (!closestFace) {return boost::none;}
 
     const auto& vertices = closestFace->first;
     const auto& normal = closestFace->second;
@@ -124,68 +128,81 @@ boost::optional<std::pair<mesh_map::Vector, float>> projectToFaceAndDistance(con
     return std::make_pair(projectedPoint, signedDistance);
 }
 
-// Type definitions for genetic algorithm
-typedef std::vector<double> State;
-typedef std::vector<State> Trajectory;
-typedef std::vector<double> Control;
-typedef std::vector<Control> ControlSequence;
 
-// State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map)
-// {
-//     // Extract state variables
-//     double x_pos = x[0];     // x position
-//     double y_pos = x[1];     // y position
-//     double theta = x[4];     // pitch angle
-//     double psi = x[5];       // yaw angle
-    
-//     // Control inputs
-//     double u0 = u[0];        // linear velocity in x-direction
-//     double u1 = u[1];        // angular velocity about z-axis
 
-//     // Calculate next position
-//     double x_next = x_pos + u0 * cos(theta) * cos(psi) * dt;
-//     double y_next = y_pos + u0 * cos(theta) * sin(psi) * dt;
 
-//     // Get terrain height and gradients at the next position
-//     mesh_map::Vector position{static_cast<float>(x_next), static_cast<float>(y_next), 0.0f};
-//     auto proj_opt = projectToFaceAndDistance(position, mesh_map);
-    
-//     if (!proj_opt)
-//     {
-//         // Return current state if projection fails
-//         return x;
-//     }
+boost::optional<State> estimatePoseAtPosition(const mesh_map::Vector& position,
+                                              const mesh_map::MeshMap::Ptr& mesh_map,
+                                              float track = 0.49f, float wheelbase = 1.3f) {
+    // Project the vehicle center onto the mesh
+    auto center_result = projectToFaceAndDistance(position, mesh_map);
+    if (!center_result) {
+        return boost::none;
+    }
+    mesh_map::Vector center = center_result->first;
 
-//     // Extract projected point and compute terrain height
-//     mesh_map::Vector projected_point = proj_opt->first;
-//     double z_next = projected_point.z;
+    // Define offset points relative to vehicle center (local coordinates)
+    mesh_map::Vector front_offset(wheelbase / 2.0f, 0.0f, 0.0f);   // Front point
+    mesh_map::Vector back_offset(-wheelbase / 2.0f, 0.0f, 0.0f);   // Back point
+    mesh_map::Vector left_offset(0.0f, track / 2.0f, 0.0f);        // Left point
+    mesh_map::Vector right_offset(0.0f, -track / 2.0f, 0.0f);      // Right point
 
-//     // Get the closest face to compute gradients
-//     auto face_opt = findClosestFace(position, mesh_map);
-//     if (!face_opt)
-//     {
-//         // Return current state if face lookup fails
-//         return x;
-//     }
+    // Project the four offset points onto the mesh
+    auto front_result = projectToFaceAndDistance(position + front_offset, mesh_map);
+    auto back_result = projectToFaceAndDistance(position + back_offset, mesh_map);
+    auto left_result = projectToFaceAndDistance(position + left_offset, mesh_map);
+    auto right_result = projectToFaceAndDistance(position + right_offset, mesh_map);
 
-//     // Extract face vertices and normal
-//     const auto& vertices = face_opt->first;
-//     const auto& normal = face_opt->second;
+    if (!front_result || !back_result || !left_result || !right_result) {
+        return boost::none;
+    }
 
-//     // Compute partial derivatives using the face normal
-//     double dh_dx = -normal.x / (normal.z + 1e-6); // ∂h/∂x
-//     double dh_dy = -normal.y / (normal.z + 1e-6); // ∂h/∂y
+    mesh_map::Vector front = front_result->first;
+    mesh_map::Vector back = back_result->first;
+    mesh_map::Vector left = left_result->first;
+    mesh_map::Vector right = right_result->first;
 
-//     // Compute roll (phi) and pitch (theta) based on terrain gradients
-//     double phi_next = atan2(-dh_dy, sqrt(1.0 + dh_dx * dh_dx));
-//     double theta_next = atan2(dh_dx, sqrt(1.0 + dh_dy * dh_dy));
+    mesh_map::Vector front_to_back = back - front; // Vehicle's x-axis (longitudinal)
+    mesh_map::Vector left_to_right = right - left; // Vehicle's y-axis (lateral)
 
-//     // Compute next yaw
-//     double psi_next = psi + u1 * dt;
+    // Normalize vectors for direction
+    float front_to_back_length = front_to_back.length();
+    float left_to_right_length = left_to_right.length();
+    if (front_to_back_length < 1e-6f || left_to_right_length < 1e-6f) {
+        return boost::none; 
+    }
+    mesh_map::Vector x_axis = front_to_back / front_to_back_length;
+    mesh_map::Vector y_axis = left_to_right / left_to_right_length;
 
-//     // Return next state
-//     return {x_next, y_next, z_next, phi_next, theta_next, psi_next};
-// }
+    // Compute z-axis (up) as cross product of x and y axes
+    mesh_map::Vector z_axis = x_axis.cross(y_axis);
+    float z_axis_length = z_axis.length();
+    if (z_axis_length < 1e-6f) {
+        return boost::none;
+    }
+    z_axis = z_axis / z_axis_length;
+
+    if (z_axis.z < 0) {
+    z_axis = mesh_map::Vector(-z_axis.x, -z_axis.y, -z_axis.z); // Negate components
+    y_axis = mesh_map::Vector(-y_axis.x, -y_axis.y, -y_axis.z); // Negate components
+    }
+
+    float roll = std::atan2(-y_axis.z, std::sqrt(y_axis.x * y_axis.x + y_axis.y * y_axis.y));
+    float pitch = std::atan2(-x_axis.z, std::sqrt(x_axis.x * x_axis.x + x_axis.y * x_axis.y));
+    float yaw = std::atan2(x_axis.y, x_axis.x);
+
+    State state = {
+        center.x,
+        center.y,
+        center.z,
+        static_cast<double>(roll),
+        static_cast<double>(pitch),
+        static_cast<double>(yaw)
+    };
+
+    return state;
+}
+
 
 State dynamics(const State& x, const Control& u, double dt, const mesh_map::MeshMap::Ptr& mesh_map) {
     // Extract state variables
@@ -215,8 +232,9 @@ Control random_control()
   std::mt19937 gen(rd());
   const double min_velocity = -1.0;
   const double max_velocity = 1.0;
-  const double min_omega = -0.5;
-  const double max_omega = 0.5;
+  // diferential drive can rotate inplace 360
+  const double min_omega = -3.21832; 
+  const double max_omega = 3.2832; 
   std::uniform_real_distribution<> dis_velocity(min_velocity, max_velocity);
   std::uniform_real_distribution<> dis_steering(min_omega, max_omega);
   return {dis_velocity(gen), dis_steering(gen)};
@@ -293,27 +311,68 @@ ControlSequence mutate(ControlSequence control_sequence, double mutation_rate = 
   return control_sequence;
 }
 
+
 double cost_function(const State& current_state, const State& next_state,
                      const Control& control, const State& state_target,
                      const mesh_map::MeshMap::Ptr& mesh_map)
 {
+  // Extract position vectors from states
   mesh_map::Vector current_vector(current_state[0], current_state[1], current_state[2]);
   mesh_map::Vector next_vector(next_state[0], next_state[1], next_state[2]);
   mesh_map::Vector target_vector(state_target[0], state_target[1], state_target[2]);
 
+  // Compute distance cost (Δ = ||p_{i+1} - p_{target}||)
   double dx = next_vector.x - target_vector.x;
   double dy = next_vector.y - target_vector.y;
   double dz = next_vector.z - target_vector.z;
   double distance_to_goal = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-  // double elevation_change = std::abs(next_vector.z - current_vector.z);
+  // Find closest faces and normals for current, next, and target positions
+  auto current_face = findClosestFace(current_vector, mesh_map);
+  if (!current_face) {
+    return std::numeric_limits<double>::infinity(); // Handle invalid face
+  }
+  auto next_face = findClosestFace(next_vector, mesh_map);
+  if (!next_face) {
+    return std::numeric_limits<double>::infinity(); // Handle invalid face
+  }
 
-  // // Check if next position is valid on mesh
-  // auto face_opt = mesh_map->getContainingFace(next_vector, 0.4);
-  // double face_penalty = face_opt ? 0.0 : 1000.0;
+  // Get normals
+  const auto& current_normal = current_face->second;
+  const auto& next_normal = next_face->second;
 
-  return distance_to_goal; //+ elevation_change + face_penalty;
+  // Compute path vector j = p_{t+1} - p_{target}
+  mesh_map::Vector path_vector = next_vector - target_vector;
+
+  // Normalize path_vector to get j as a unit vector (if non-zero)
+  double path_length = std::sqrt(path_vector.x * path_vector.x +
+                                 path_vector.y * path_vector.y +
+                                 path_vector.z * path_vector.z);
+  if (path_length < 1e-6) {
+    return std::numeric_limits<double>::infinity(); // Avoid division by zero
+  }
+  mesh_map::Vector j = path_vector / path_length;
+
+  // Compute slope penalty (Σ = |n_t · j|)
+  double sigma = std::abs(current_normal.x * j.x +
+                          current_normal.y * j.y +
+                          current_normal.z * j.z);
+
+  // Compute orthogonality penalty (Λ = 1 - |n_t · n_{t+1}|)
+  double dot_normals = current_normal.x * next_normal.x +
+                       current_normal.y * next_normal.y +
+                       current_normal.z * next_normal.z;
+  double lambda = 1.0 - std::abs(dot_normals);
+
+  // Compute traversability cost (Π = 1/2 (Σ + Λ))
+  double pi = 0.5 * (sigma + lambda);
+
+  // Combine costs with weights (assuming α_1 for distance, α_2 for traversability)
+  constexpr double alpha_1 = 1.0; // Weight for distance cost (adjust as needed)
+  constexpr double alpha_2 = 1.0; // Weight for traversability cost (adjust as needed)
+  return alpha_1 * distance_to_goal + alpha_2 * pi;
 }
+
 
 ControlSequence genetic_algorithm(const State& state_init, const State& state_target,
                                  double dt, int pop_size, int generations,
@@ -436,7 +495,7 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
         twist_pub->publish(twist_msg);
 
         // Wait for dt seconds
-        rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(dt)));
+        // rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(dt)));
 
         // Update x_current using current_state from odometry
         {

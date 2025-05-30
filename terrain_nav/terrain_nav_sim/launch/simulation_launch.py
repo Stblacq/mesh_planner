@@ -106,7 +106,7 @@ def generate_launch_description():
             # This facilitates easier topic bridging.
             "robot",
             "-z",
-            "1",
+            "0",
         ],
         parameters=[
             {"use_sim_time": True},
