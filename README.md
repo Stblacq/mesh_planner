@@ -74,6 +74,14 @@ This demo does **not** include collision avoidance. For collision-aware planning
 
 Refer to the [Mesh Navigation documentation](https://github.com/naturerobots/mesh_navigation) for details on setting up semantic layers and planners.
 
+## Videos
+[![Genetic Kinodynamic Planning Demo](https://img.youtube.com/vi/IYRplkzxtIA/0.jpg)](https://youtu.be/IYRplkzxtIA)
+
+
+### 🎥 Gradient-Free Kinodynamic Planning
+
+[![Gradient-Free Kinodynamic Planning](https://img.youtube.com/vi/KI9RNQK9xW4/0.jpg)](https://youtu.be/KI9RNQK9xW4)
+
 ## License
 
 This project is shared for academic and demonstration purposes in conjunction with our publication. Refer to each included project's license for further details.
