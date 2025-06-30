@@ -452,8 +452,7 @@ Trajectory ga_planner(const State& start_point, const State& goal_point,
             try {
                 // Transform pose to map frame using tf2::Duration
                 geometry_msgs::msg::PoseStamped pose_in_map;
-                tf_buffer.transform(pose_in_odom, pose_in_map, mesh_map->mapFrame(), 
-                                    tf2::durationFromSec(1.0)); // Use tf2::durationFromSec
+                tf_buffer.transform(pose_in_odom, pose_in_map, mesh_map->mapFrame(), tf2::durationFromSec(1.0));
                 current_state = pose_in_map;
                 odometry_received = true;
             } catch (tf2::TransformException &ex) {
