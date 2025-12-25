@@ -67,10 +67,7 @@ This demo is designed for **ROS 2 Humble** and requires the following:
 ## Notes
 
 ### Collision Avoidance
-This demo does **not** include collision avoidance. For collision-aware planning, integrate the **Wavefront Planner** from [Mesh Navigation](https://github.com/naturerobots/mesh_navigation) as a global planner by:
-
-- Using vertex costs for obstacle-aware planning
-- Setting up semantic layers for parts of the mesh (e.g., traversability)
+This demo does **not** include collision avoidance. For collision-aware planning, refer to our recent [project](https://github.com/Stblacq/uneven_terrain.git) 
 
 Refer to the [Mesh Navigation documentation](https://github.com/naturerobots/mesh_navigation) for details on setting up semantic layers and planners.
 
